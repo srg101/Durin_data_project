@@ -31,178 +31,81 @@ theme_set(theme_bw(base_size = 12))
 
 ```
 
-This is the git repository for the DURIN project financed by the Norwegian Research Council project.
-This repository is linked to the DURIN data paper:
-xxx et al. (not written yet).
+This is the git repository for the [DURIN project](https://betweenthefjords.w.uib.no/durin/).
+The goal of this repo is to organize and streamline the data management in the project and beyond.
 
-
-# INTRODUCTION
-
-Predicting how the biosphere will respond to the global climate and environmental changes, and in turn how these responses will feed back to and influence the climate and earth system, is a grand and urgent cross-disciplinary scientific challenge. 
-Despite their broad climatic and geographic ranges and dominant ecosystem roles across boreal, alpine and arctic vegetation zones, much remains to be understood about the critical impact of dwarf-shrubs at different organizational levels; from physiological responses to species interactions and ecosystem functioning.
-Exploring climate-responses and feedbacks across biomes and habitats, these insights will not only further fundamental knowledge, but through also integrating the under-represented dwarf-shrubs in earth system models, develop a more realistic parameterization of terrestrial processes.
-
-DURINs unique multi-pronged empirical approach builds upon existing distributed observational systems, field experiments, and controlled-environment experiments. 
-This enables great flexibility in exploring broad-scale patterns and context-dependencies in dwarf-shrub biotic interactions, and responses and feedbacks to climate
-across multiple sites. 
-It also allows for detailed quantification of the underlying mechanisms and processes which can then be scaled to an earth system feedback perspective. 
-To facilitate this, DURIN will develop a collaborative workflow facilitating cross-disciplinary knowledge transfer. 
-DURIN is well-placed to conduct critical fundamental and applied climate change research through establishing a new research cluster, drawing together a uniquely-qualified team with complementary skills and expertise from seven world-class research institutions within Norway. 
-The project leadership and partners have excellent track records in relevant fields, and DURIN will provide career opportunities for early-career researchers.
-
-```{r concept-figure, out.width="50%", fig.cap= "Conceptual diagram illustrating the role of dwarf-shrubs in climate responses and feedbacks. Responses to climate operate via physiological processes (assessed in DURIN WP1), interactions with other organisms (WP2), and ecosystem processes (WP3); and processes at all these levels may impact feedbacks to the climate system (WP4)."}
+```{r concept-figure, out.width="40%"}
 knitr::include_graphics("pics/Circle_figure_Sticker.png")
 ```
 
-The overarching objective of the DURIN project is to provide critical new knowledge about an important but underrepresented plant functional type in climate-biosphere science; the dwarf-shrubs of the boreal, alpine, and arctic regions, and simultaneously provide a worked example of an integrated climate response-feedback research workflow.
 
-The primary objective of the DURIN project is to provide critical new knowledge about an important but underrepresented plant functional type in climate-biosphere science; the dwarf-shrubs of the boreal, alpine, and arctic regions, and simultaneously provide a worked example of an integrated climate response-feedback research workflow. 
-To that end, the secondary objectives are to:
+## DATA MANAGEMENT
 
-- Examine variation in dwarf-shrubs physiological and growth responses to climate, and their impacts on microclimate (WP1);
+### Location of data, metadata and code
 
-- Map important species interactions, focusing on ericoid mycorrhizae (ErM) and quantifying key roles in dwarf-shrub carbon dynamics (WP2);
+The overview of all the **datasets** is [here](https://docs.google.com/spreadsheets/d/1KlQwSkcPa09POOSV0B7i_Z5KWcKDyw_Xu7Jikc9voyA/edit?usp=sharing).
 
-- Assess how environmental factors and vegetation characteristics impact ecosystem functioning and carbon dynamics (WP3);
+The raw and clean **datasets** from are stored and will be made available after the end of the project on [OSF](https://osf.io/f4v9t/).
+For now the data is only available to the project partners.
 
-- Use DURIN WP0-3 outcomes to parameterize dwarf-shrubs as a new plant functional type within a terrestrial ecosystem model (WP4);
+All R code for the cleaning the raw data is available on the [Durin GitHub](https://github.com/Durin-project).
 
-- Create optimized data workflows using transparent, reproducible Open Science practices (WP5).
+The data documentation, including a draft for the data paper is available [here](https://docs.google.com/document/d/13Mky4gZfCzHIZl82zQKX6nb2vRneZXDRVDAmp0a3gdA/edit?usp=sharing) (only available for authors), and the **data dictionaries** are in this below in this readme file.
 
+### Naming conventions for the data and files
 
-# METHODS
+We use **snake_case style** for names and coding.
+Snake_case means that we use lower case letters separated by an underscore, for example *biomass_g*.
 
-We have extensive prior data and infrastructure in both systems.
-Using a nested design, we will set up blocks in forested and open heathland systems (Fig. 2b), for five focal dwarf-shrub species (*Calluna vulgaris*, *Empetrum nigrum*, *Vaccinium myrtillus*, *V. vitis-idea*, and *Betula nana*). 
-These species are selected to be the dominant dwarf-shrubs in our region, while also representing wide ranges in dwarf-shrub leaf size, longevity, leaf economic traits, and mycorrhizal associations (Fig. 2c). 
-These sites will provide a flexible resource for both broad-scale and targeted field data collection, sites for field experiments, and plant material for controlled-environment experiments (Fig. 2d, study designs detailed in WP0, responses in WP1-WP3).
-Data workflow will follow Open Science best practices (WP5), to inform both analysis of plant-climate relations (WP1-3) and CLM-FATES modelling (WP4) (Fig. 2e). 
-Scientific outputs include community outreach, conference proceedings and scientific articles (Fig. 2f). 
-The entire DURIN project design will be shared as a generalized workflow highlighting how collaborative, Open Science practices facilitate cross-disciplinary knowledge transfer between ecologists and Terrestrial Ecosystem Modellers (Fig. 2g, WP0-5).
+File and variable names should be *meaningful*.
+Do not use *my_data.csv* or *var1*.
+For a full description of the main variables see table below.
 
-
-```{r method, fig.cap= "Figure 2 Our dwarf-shrub heath observational system based around two biogeographic gradients; a latitudinal gradient from boreal to arctic heathlands along the Norwegian coastline, and an elevational and continentality gradient from boreal to alpine systems."}
-knitr::include_graphics("pics/Picture 1.jpg")
-```
-
-# DATA MANAGEMENT
-
-## Location of data, metadata and code
-
-The **project description**, an overview of all the **datasets**, and the **data dictionaries** are in this readme file, available on [GitHub](https://github.com/Durin-project/Durin_data).
-The draft for the data paper is available [here](...). (only available for authors)
-
-The raw and clean **datasets** from this project are stored and available on [OSF](https://osf.io/f4v9t/).
-
-All R code for the cleaning the raw data is available on [GitHub](https://github.com/Durin-project/Durin_data).
-
-
-### Naming conventions used for the data
+We use some **redundancy** in variable names to avoid mistakes.
+BlockID and plotID should contain the higher hierarchical levels.
+For example blockID is a combination of siteID + block number: Lyg1, Lyg2.
+PlotID contains siteID, block number and treatment: Lyg1_open, Lyg1_forest
 
 | Files or variable  | Naming convention  | Example  |
 |:---|:---|:---|
 | Project  | Project name  |DURIN |
 | Datasets  | Project_Status_(Experiment)_Response_Year(s).Extension | DURIN_clean_cflux_2023-2025.csv |
 |  |  |  |
-| siteID  | Unique site ID written out fully| Lygra |
+| date  | Date of data collection| yyyy-mm-dd; do not split year, month and day into several columns |
+| year  | Year of data collection| yyyy; allowed if no specific date is available, try to avoid |
+| siteID  | Unique site ID written out fully| Lygra, Sogndal, Tromso, and Iskoras? |
 | blockID  | Unique block ID, with 3 first letters of siteID and a number (1-4) | Lyg1 |
-| plotID  | Unique plot ID with blockID and treatment | Alr1... |
-| treatment  | ... |  |
+| plotID  | Unique plot ID with blockID and habitat | Lyg1_open, Lyg1_forest |
+| habitat  | Open versus forested habitat  | open, forest |
 | species  | Vascular plant taxon names follow for Norway Lid & Lid (Lid J & Lid, 2010). We use full species names. | *Leontopodium nivale* |
 | responses  | Response variables | cover, biomass, Reco |
+|  |  |  |
+| drought_experiment  |  |  |
+| drought | Drought treatment using rain-out shelters that reduce precipitation by 0, 60 or 90%.  | ambient, moderate, extreme |
+| successional_stage  | Vegetation representing post-fire successional stages. | young, intermediate, old |
+|  |  |  |
+| removal_experiment  |  |  |
+| removal_treatment  | Removal treatment | control, removal |
 
 
-### Valid siteID
+### Organize data sets
 
-Here is the list of valid siteIDs.
+Sort the dataset so that the important variable come first, preferable use this order:
 
-| siteID  |
-|:---|
-| Lygra  |
-| ...  |
-| ...  |
-| ...  |
-
-Some useful code...
-
-```{r clean-site, eval=FALSE, echo=TRUE}
-# code to clean site names
-dat |> 
-  mutate(siteID = recode(siteID,
-                         # old name (replace) = valid name (do not change)
-                         'Gud' = "Gudmedalen",
-                         'Lav' = "Lavisdalen",
-                         'Ram' = "Rambera",
-                         'Ulv' = "Ulvehaugen",
-                         'Skj' = "Skjelingahaugen",
-                         'Alr' = "Alrust",
-                         'Arh' = "Arhelleren",
-                         'Fau' = "Fauske",
-                         'Hog' = "Hogsete",
-                         'Ovs' = "Ovstedalen",
-                         'Vik' = "Vikesland",
-                         'Ves' = "Veskre"))
-```
+- Date/year
+- siteID
+- blockID
+- plotID
+- habitat
+- treatment
+- plantID
+- leafID
+- response_variable (diversity, biomass, flux)
+- predictor_variables (temperature level, oceanity)
+- other_variables (remark, data collector, weather)
 
 
-
-## Overview of datasets
-
-This is an overview over all the datasets.
-They are available on [OSF](https://osf.io/f4v9t/).
-
-| Response  | Time period  | Level | Project  | Filename  |
-|:---|:---|:---|:---|:---|
-| **Site level** |  |  |  |  |
-| Coordinates, elevation | - | Site | VCG |  e.g. VCG_clean_coordinates.csv |
-| Geology, Land-use history | - | Site | VCG |  |
-| |  |  |  |  |
-| **1) Vegetation** |  |  |  |  |
-| Vascular plant species cover  | 2015 - 2019, 2022  | Plot  | FunCaB  |  |
-| Vascular plant species presence  | 2015 - 2019, 2022  | Subplot  | FunCaB |  |
-| Vegetation height  | 2015 - 2019, 2022  | Plot  | FunCaB  |  |
-| Functional group biomass  | 2015 - 2022  | Plot  | FunCaB/FUNDER  |  |
-| Total biomass  | 2022  | Plot  | FUNDER  |  |
-| Reflectance  | 2021  | Plot  | FunCaB  |  |
-| |  |  |  |  |
-| Root biomass  | 2022  | Plot  | FUNDER  |  |
-| Root productivity  | 2022  | Plot  | FUNDER  |  |
-| Root traits  | 2022  | Plot  | FUNDER  |  |
-| |  |  |  |  |
-| Bryophyte composition  | 2022  | Plot  | FUNDER  |  |
-| Bryophyte presence?  | 2022  | Plot  | FUNDER  |  |
-| Bryophyte functional traits  | 2022  | Plot  | FUNDER  |  |
-| |  |  |  |  |
-| **2) Mesofauna** |  |  |  |  |
-| Mycelia production  | 2022  | Plot  | FUNDER  |  |
-| Mesofauna functional groups and diversity  | 2022  | Plot  | FUNDER  |  |
-| Mesofauna abundance and biomass  | 2022  | Plot  | FUNDER  |  |
-| |  |  |  |  |
-| **3) Fungi** |  |  |  |  |
-| Fungal functional groups and diversity  | 2022  | Plot  | FUNDER  |  |
-| |  |  |  |  |
-| **4) Bacteria** |  |  |  |  |
-| Bacteria functional groups and diversity  | 2022  | Plot  | FUNDER  |  |
-| **5) Carbon cycling** |  |  |  |  |
-| Ecosystem carbon fluxes  | 2015-2018, 2022  | Plot  | FunCaB/FUNDER  |  |
-| Litter bag decomposition  | 2022  | Plot  | FUNDER  |  |
-| Tea bag decomposition  | 2022  | Plot  | FUNDER  |  |
-| |  |  |  |  |
-| **6) Nutrient cycling** |  |  |  |  |
-| C and N stocks  | 2022  | Plot  | FUNDER  |  |
-| Available nutrients  | 2022  | Plot  | FUNDER  |  |
-| Soil depth  | 2022  | Plot  | FUNDER  |  |
-| |  |  |  |  |
-| **7) Climate** |  |  |  |  |
-| Soil temperature and moisture  | 2022  | Plot  | FUNDER  |  |
-| Soil temperature and moisture  | 2015-2017  | Plot  | FunCaB  |  |
-| Climate | 2009-2022  | Site  | VCG  |  |
-
-
-## Methods
-
-
-## Data dictionary
+### Data dictionary
 
 **How to make a data dictionary?**
 
@@ -254,16 +157,9 @@ Add a title, and a code chunk using `kable()` to display the data dictionary.
 
 For more details go to the [dataDocumentation readme](https://github.com/audhalbritter/dataDocumentation) file.
 
-************************************************************************************************************
-************************************************************************************************************
 
-### 1 VEGETATION DATA
-
-## Biomass
-
-```{r biomassdic, eval=FALSE, echo=TRUE}
- knitr::kable(biomass_dic)
+```{r biomass-dic, out.width="80%"}
+knitr::include_graphics("pics/data_dic.png")
 ```
 
-************************************************************************************************************
 
