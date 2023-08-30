@@ -38,7 +38,7 @@ leafscans.clean = tempDURIN |>
   # Drop the file path for the distinct to work
   select(-File) |>
   # Rename columns to match main dataset
-  rename(envelope_ID = ID, bulk_nr_leaves = n) |>
+  rename(envelope_ID = ID, bulk_nr_leaves_scanned = n) |>
   # Drop accidental duplicates
   distinct() |>
   mutate(cutting = case_when(
@@ -56,4 +56,37 @@ dup.check = leafscans.clean |>
   select(envelope_ID) |>
   filter(duplicated(envelope_ID))
 
+##
 
+# testing bulk leaf replacement function
+# https://stackoverflow.com/questions/50010196/replacing-na-values-from-another-dataframe-by-id
+durin.test = durin |>
+  left_join(leafscans.clean) |>
+  mutate(bulk_nr_leaves_clean = coalesce(bulk_nr_leaves, bulk_nr_leaves_scanned))
+
+na.check = durin.test |>
+  filter(is.na(leaf_area)) |>
+  relocate(c(species, siteID, day, month, project, bulk_nr_leaves, bulk_nr_leaves_scanned), .after = envelope_ID) |>
+  filter(project == "Field - Traits")
+
+table(na.check$siteID)
+
+write.csv(na.check, "output/2023.08.29_missing scans.csv")
+
+# List all files in Tjøtta
+filesTjotta <- as.data.frame(dir(path = "raw_data/Tjøtta", pattern = ".jpeg", full.names = FALSE, recursive = TRUE)) |>
+  rename(x = "dir(path = \"raw_data/Tjøtta\", pattern = \".jpeg\", full.names = FALSE, recursive = TRUE)") |>
+  mutate(envelope_ID = str_sub(x, -12, -7)) |>
+  select(envelope_ID)
+
+na.check.Tjotta = na.check |>
+  right_join(filesTjotta)
+
+# List all files in Sogndal
+filesSogndal <- as.data.frame(dir(path = "raw_data/DURIN", pattern = ".jpeg", full.names = FALSE, recursive = TRUE)) |>
+  rename(x = "dir(path = \"raw_data/DURIN\", pattern = \".jpeg\", full.names = FALSE, recursive = TRUE)") |>
+  mutate(envelope_ID = str_sub(x, -12, -7)) |>
+  select(envelope_ID)
+
+na.check.Sogndal = na.check |>
+  right_join(filesSogndal)
