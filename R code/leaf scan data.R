@@ -60,7 +60,8 @@ dup.check = leafscans.clean |>
 
 # testing bulk leaf replacement function
 # https://stackoverflow.com/questions/50010196/replacing-na-values-from-another-dataframe-by-id
-durin.test = durin |>
+durin.test = read.csv("raw_data/2023.08.04_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
+                      na.strings=c("","NA")) |>
   left_join(leafscans.clean) |>
   mutate(bulk_nr_leaves_clean = coalesce(bulk_nr_leaves, bulk_nr_leaves_scanned))
 
@@ -90,3 +91,69 @@ filesSogndal <- as.data.frame(dir(path = "raw_data/DURIN", pattern = ".jpeg", fu
 
 na.check.Sogndal = na.check |>
   right_join(filesSogndal)
+
+# List all files for Akuonani's uploads
+# Jun 22 C3PO
+            # List all the files within the folder
+Jun22C3PO <- as.data.frame(dir(path = "raw_data/DURIN LEAF SCANS/2023.06.22 C3PO", pattern = ".jpeg", full.names = FALSE, recursive = TRUE)) |>
+  # Rename that awkward column name
+  rename(x = "dir(path = \"raw_data/DURIN LEAF SCANS/2023.06.22 C3PO\", pattern = \".jpeg\", full.names = FALSE, recursive = TRUE)") |>
+  # Subset the file name so it's an envelope_ID
+  mutate(envelope_ID = str_sub(x, 1,7)) |>
+  # Select only the envelope_ID column
+  select(envelope_ID)
+
+                     # Use the list of missing scans (na.check, above)
+na.check.Jun22C3PO = na.check |>
+  # Filter join the list of files in the folder to match between missing and found scans
+  right_join(Jun22C3PO)
+
+# Write output list for Sonya
+write.csv(na.check.Jun22C3PO, "output/2023.09.01_FoundScans_Jun22C3PO.csv")
+
+# Do the same for the other two folders in this zip
+Jun22Spock <- as.data.frame(dir(path = "raw_data/DURIN LEAF SCANS/2023.06.22 Spock", pattern = ".jpeg", full.names = FALSE, recursive = TRUE)) |>
+  rename(x = "dir(path = \"raw_data/DURIN LEAF SCANS/2023.06.22 Spock\", pattern = \".jpeg\", full.names = FALSE, recursive = TRUE)") |>
+  mutate(envelope_ID = str_sub(x, 1,7)) |>
+  select(envelope_ID)
+
+na.check.Jun22Spock = na.check |>
+  right_join(Jun22Spock)
+
+Jun27C3PO <- as.data.frame(dir(path = "raw_data/DURIN LEAF SCANS/2023-06-27 c3po", pattern = ".jpeg", full.names = FALSE, recursive = TRUE)) |>
+  rename(x = "dir(path = \"raw_data/DURIN LEAF SCANS/2023-06-27 c3po\", pattern = \".jpeg\", full.names = FALSE, recursive = TRUE)") |>
+  mutate(envelope_ID = str_sub(x, 1,7)) |>
+  select(envelope_ID)
+
+na.check.Jun27C3PO = na.check |>
+  right_join(Jun27C3PO)
+
+write.csv(na.check.Jun27C3PO, "output/2023.09.01_FoundScans_Jun27C3PO.csv")
+
+# Do this again with the DURIN folder re-uploaded to OSF ----
+               # List all the files within the folder
+AllUSBScans <- as.data.frame(dir(path = "raw_data/DURIN", pattern = ".jpeg", full.names = FALSE, recursive = TRUE)) |>
+  # Rename that awkward column name
+  rename(x = "dir(path = \"raw_data/DURIN\", pattern = \".jpeg\", full.names = FALSE, recursive = TRUE)") |>
+         # Subset the file name so it's an envelope_ID
+  mutate(envelope_ID = str_sub(x, -12, -6),
+         # Subset so we know where each scan is
+         filepath = str_sub(x, 1, -14)) |>
+  # Drop the unused column
+  select(-x)
+
+                    # Use the list of missing scans (na.check, above)
+na.check.AllUSBScans = na.check |>
+  # Something isn't working with the filter join
+  # Workaround: add column for filtering just the missing scans
+  mutate(status = "missing") |>
+  # Filter join the list of found scans (but note this isn't working!
+  # It will return all the found scans regardless of if they match na.check)
+  right_join(AllUSBScans, by = "envelope_ID") |>
+  # Filter to only the relevant scans
+  filter(status == "missing")
+
+# Export for Sonya
+table(na.check.AllUSBScans$filepath)
+
+write.csv(na.check.AllUSBScans, "output/2023.09.01_FoundScans_AllUSBScans.csv")
