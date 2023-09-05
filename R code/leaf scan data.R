@@ -157,3 +157,48 @@ na.check.AllUSBScans = na.check |>
 table(na.check.AllUSBScans$filepath)
 
 write.csv(na.check.AllUSBScans, "output/2023.09.01_FoundScans_AllUSBScans.csv")
+
+
+# Do this again with all the Pi folders re-uploaded to OSF ----
+# List all the files within the folder
+AllPiScans <- as.data.frame(dir(path = "raw_data/Pi's leaf scans", pattern = ".jpeg", full.names = FALSE, recursive = TRUE)) |>
+  # Rename that awkward column name
+  rename(x = "dir(path = \"raw_data/Pi's leaf scans\", pattern = \".jpeg\", full.names = FALSE, recursive = TRUE)") |>
+  # Subset the file name so it's an envelope_ID
+  mutate(envelope_ID = str_sub(x, -12, -6),
+         # Subset so we know where each scan is
+         filepath = str_sub(x, 1, -14)) |>
+  # Drop the unused column
+  select(-x)
+
+# Use the list of missing scans (na.check, above)
+na.check.AllPiScans = na.check |>
+  # Something isn't working with the filter join
+  # Workaround: add column for filtering just the missing scans
+  mutate(status = "missing") |>
+  # Filter join the list of found scans (but note this isn't working!
+  # It will return all the found scans regardless of if they match na.check)
+  right_join(AllPiScans, by = "envelope_ID") |>
+  # Filter to only the relevant scans
+  filter(status == "missing") |>
+  # Select the relevant columns
+  select(envelope_ID, siteID, filepath)
+
+# Export for Sonya
+table(na.check.AllPiScans$filepath)
+table(na.check.AllPiScans$siteID)
+table(na.check$siteID)
+
+write.csv(na.check.AllPiScans, "output/2023.09.05_FoundScans_Pi's leaf scans.csv")
+
+# Move the files to a new one so we can visually inspect all the found scans ----
+# This isn't tidy, sorry...
+library(filesstrings)
+
+file.mover = na.check.AllPiScans |>
+  mutate(destination = paste0("output/found_scans/", filepath),
+         filename = paste0("raw_data/Pi's leaf scans/",filepath, "/",envelope_ID, ".jpeg")) |>
+  distinct()
+
+move_files(file.mover$filename, file.mover$destination)
+
