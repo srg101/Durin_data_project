@@ -41,12 +41,16 @@ write.csv(tempDURIN, "output/2023.09.07_LeafScanData_Raw.csv")
 
 # Clean data ----
 leafscans.clean = tempDURIN |>
-  # Drop the file path for the distinct to work
-  select(-File) |>
   # Rename columns to match main dataset
   rename(envelope_ID = ID, bulk_nr_leaves_scanned = n) |>
-  # Drop accidental duplicates
+  # Choose edited and found over original
+  group_by(envelope_ID) |>
+  slice_min(priority) |>
+  # We have some honest duplicates thanks to the 22 Jun mixup
+  # Use distinct to get rid of those
+  select(-File) |>
   distinct() |>
+  # Remove doubled scans
   mutate(cutting = case_when(
     # One phys team scan has two values
     # Keeping the earliest one
@@ -81,6 +85,8 @@ table(na.check$siteID)
 na.check |> group_by(species,siteID) |> summarize(n = length(day))
 
 write.csv(na.check, "output/2023.08.29_missing scans.csv")
+
+# Troubleshooting for missing scans -----
 
 # List all files in Tjøtta
 filesTjotta <- as.data.frame(dir(path = "raw_data/Tjøtta", pattern = ".jpeg", full.names = FALSE, recursive = TRUE)) |>
@@ -166,7 +172,6 @@ table(na.check.AllUSBScans$filepath)
 
 write.csv(na.check.AllUSBScans, "output/2023.09.01_FoundScans_AllUSBScans.csv")
 
-
 # Do this again with all the Pi folders re-uploaded to OSF ----
 # List all the files within the folder
 AllPiScans <- as.data.frame(dir(path = "raw_data/Pi's leaf scans", pattern = ".jpeg", full.names = FALSE, recursive = TRUE)) |>
@@ -191,6 +196,11 @@ na.check.AllPiScans = na.check |>
   filter(status == "missing") |>
   # Select the relevant columns
   select(envelope_ID, siteID, filepath)
+
+na.check.stillmissing = na.check |>
+  anti_join(AllPiScans)
+
+write.csv(na.check.stillmissing, "output/2023.09.07_StillMissingScans.csv")
 
 # Export for Sonya
 table(na.check.AllPiScans$filepath)
