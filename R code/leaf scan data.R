@@ -72,6 +72,8 @@ na.check = durin.test |>
 
 table(na.check$siteID)
 
+na.check |> group_by(species,siteID) |> summarize(n = length(day))
+
 write.csv(na.check, "output/2023.08.29_missing scans.csv")
 
 # List all files in Tjøtta
