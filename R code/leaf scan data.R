@@ -26,12 +26,18 @@ tempDURIN <- map_df(set_names(filesDURIN), function(file) {
     set_names() %>%
     map_df(~ read.csv(file = file)) #important! reading in American format
 }, .id = "File") |>
-  select(-X)
+  select(-X) |>
+  # Code in the prioritizing for keeping duplicates
+  mutate(priority = case_when(
+    str_detect(File, "Edit") ~ 1,
+    str_detect(File, "Found") ~ 2,
+    TRUE ~ 3
+  ))
 
 str(tempDURIN)
 
 # Export data for upload to OSF
-write.csv(tempDURIN, "output/2023.08.29_LeafScanData_FirstRound.csv")
+write.csv(tempDURIN, "output/2023.09.07_LeafScanData_Raw.csv")
 
 # Clean data ----
 leafscans.clean = tempDURIN |>
