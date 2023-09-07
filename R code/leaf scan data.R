@@ -68,12 +68,13 @@ dup.check = leafscans.clean |>
 
 ##
 
-# testing bulk leaf replacement function
+# testing bulk leaf replacement function -----
 # https://stackoverflow.com/questions/50010196/replacing-na-values-from-another-dataframe-by-id
 durin.test = read.csv("raw_data/2023.08.04_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
                       na.strings=c("","NA")) |>
   left_join(leafscans.clean) |>
-  mutate(bulk_nr_leaves_clean = coalesce(bulk_nr_leaves, bulk_nr_leaves_scanned))
+  mutate(bulk_nr_leaves_clean = coalesce(bulk_nr_leaves, bulk_nr_leaves_scanned)) |>
+  relocate(c(bulk_nr_leaves_clean,bulk_nr_leaves_scanned,bulk_nr_leaves), .after = plant_height)
 
 na.check = durin.test |>
   filter(is.na(leaf_area)) |>
@@ -85,6 +86,32 @@ table(na.check$siteID)
 na.check |> group_by(species,siteID) |> summarize(n = length(day))
 
 write.csv(na.check, "output/2023.08.29_missing scans.csv")
+
+## Check any mismatches in the scanned vs counted leaves ----
+### Make file path object ----
+scanpaths = tempDURIN |>
+  # Rename columns to match main dataset
+  rename(envelope_ID = ID, bulk_nr_leaves_scanned = n) |>
+  # Choose edited and found over original
+  group_by(envelope_ID) |>
+  slice_min(priority) |>
+  select(envelope_ID, File)
+
+leafnr.check = durin.test |>
+  # Only working with trait team leaves
+  filter(project == "Field - Traits") |>
+  select(envelope_ID, siteID, bulk_nr_leaves_scanned,bulk_nr_leaves) |>
+  # Not interested in the NA mismatch
+  drop_na(bulk_nr_leaves) |>
+  # Filter for mismatches
+  filter(bulk_nr_leaves != bulk_nr_leaves_scanned) |>
+  # Bring back in file paths so we can look at images
+  left_join(scanpaths) |>
+  # Get rid of the honest duplicates from the 22 Jun error
+  group_by(envelope_ID) |>
+  slice_head()
+
+write.csv(leafnr.check, "output/2023.09.07_leafnr.check.csv")
 
 # Troubleshooting for missing scans -----
 
@@ -144,7 +171,7 @@ na.check.Jun27C3PO = na.check |>
 
 write.csv(na.check.Jun27C3PO, "output/2023.09.01_FoundScans_Jun27C3PO.csv")
 
-# Do this again with the DURIN folder re-uploaded to OSF ----
+## Do this again with the DURIN folder re-uploaded to OSF ----
                # List all the files within the folder
 AllUSBScans <- as.data.frame(dir(path = "raw_data/DURIN", pattern = ".jpeg", full.names = FALSE, recursive = TRUE)) |>
   # Rename that awkward column name
@@ -172,7 +199,7 @@ table(na.check.AllUSBScans$filepath)
 
 write.csv(na.check.AllUSBScans, "output/2023.09.01_FoundScans_AllUSBScans.csv")
 
-# Do this again with all the Pi folders re-uploaded to OSF ----
+## Do this again with all the Pi folders re-uploaded to OSF ----
 # List all the files within the folder
 AllPiScans <- as.data.frame(dir(path = "raw_data/Pi's leaf scans", pattern = ".jpeg", full.names = FALSE, recursive = TRUE)) |>
   # Rename that awkward column name
@@ -209,7 +236,7 @@ table(na.check$siteID)
 
 write.csv(na.check.AllPiScans, "output/2023.09.05_FoundScans_Pi's leaf scans.csv")
 
-# Move the files to a new one so we can visually inspect all the found scans ----
+## Move the files to a new one so we can visually inspect all the found scans ----
 # This isn't tidy, sorry...
 library(filesstrings)
 
