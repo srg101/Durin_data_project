@@ -66,7 +66,20 @@ dup.check = leafscans.clean |>
   select(envelope_ID) |>
   filter(duplicated(envelope_ID))
 
-##
+
+## Code to add leaf areas to the main DURIN object ----
+
+# To be moved to the main cleaning script once finished
+durin.leafarea = read.csv("raw_data/2023.08.04_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
+                          na.strings=c("","NA")) |>
+  # Join in the leaf area scans
+  left_join(leafscans.clean) |>
+  # Manually replace bulk_nr_leaves for ones the scanned number is more accurate
+  mutate(bulk_nr_leaves = case_when(
+    envelope_ID %in% c("BFN9270", "BHY0712", "AYP7221", "ALA0711", "BHK3198",
+                       "AUW3217") ~ bulk_nr_leaves_scanned,
+    TRUE ~ bulk_nr_leaves
+  ))
 
 # testing bulk leaf replacement function -----
 # https://stackoverflow.com/questions/50010196/replacing-na-values-from-another-dataframe-by-id
