@@ -79,7 +79,11 @@ durin.leafarea = read.csv("raw_data/2023.08.04_DURIN Plant Functional Traits_Lyg
     envelope_ID %in% c("BFN9270", "BHY0712", "AYP7221", "ALA0711", "BHK3198",
                        "AUW3217") ~ bulk_nr_leaves_scanned,
     TRUE ~ bulk_nr_leaves
-  ))
+  ),
+  # Make updated bulk_nr_leaves tab
+  bulk_nr_leaves_clean = coalesce(bulk_nr_leaves, bulk_nr_leaves_scanned)) |>
+  # Calculate specific leaf area
+  mutate(SLA.wet = leaf_area/wet_mass_g)
 
 # testing bulk leaf replacement function -----
 # https://stackoverflow.com/questions/50010196/replacing-na-values-from-another-dataframe-by-id
