@@ -37,7 +37,7 @@ tempDURIN <- map_df(set_names(filesDURIN), function(file) {
 str(tempDURIN)
 
 # Export data for upload to OSF
-write.csv(tempDURIN, "output/2023.09.07_LeafScanData_Raw.csv")
+write.csv(tempDURIN, "output/2023.09.11_LeafScanData_Raw.csv")
 
 # Clean data ----
 leafscans.clean = tempDURIN |>
@@ -246,6 +246,25 @@ na.check.stillmissing = na.check |>
 
 write.csv(na.check.stillmissing, "output/2023.09.07_StillMissingScans.csv")
 
+na.check.Lygra = na.check.stillmissing |>
+  filter(siteID == "Lygra") |>
+  mutate(spp.code = case_when(
+    species == "Calluna vulgaris" ~ "CV",
+    species == "Vaccinium vitis-idaea" ~ "VV",
+    species == "Vaccinium myrtillus" ~ "VM",
+    species == "Empetrum nigrum" ~ "EN",
+    TRUE ~ "unknown"
+  ),
+    plotID = case_when(
+    is.na(DURIN_plot) ~ paste0(ageClass, DroughtTrt, spp.code),
+    is.na(ageClass) ~ DURIN_plot,
+    TRUE ~ "unknown"
+ ),
+ missing.code = paste(plotID, "-", plant_nr)
+  )
+
+table(na.check.Lygra$missing.code)
+
 # Export for Sonya
 table(na.check.AllPiScans$filepath)
 table(na.check.AllPiScans$siteID)
@@ -254,7 +273,6 @@ table(na.check$siteID)
 write.csv(na.check.AllPiScans, "output/2023.09.05_FoundScans_Pi's leaf scans.csv")
 
 ## Move the files to a new one so we can visually inspect all the found scans ----
-# This isn't tidy, sorry...
 library(filesstrings)
 
 file.mover = na.check.AllPiScans |>
