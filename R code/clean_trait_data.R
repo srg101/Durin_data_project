@@ -205,4 +205,4 @@ durin = read.csv("raw_data/2023.07.20_DURIN Plant Functional Traits_Lygra Sognda
     )
   )
 
-# write.csv(durin, "output/2023.09.08_cleanDURIN.csv")
+# write.csv(durin, "output/2023.09.11_cleanDURIN.csv")
