@@ -6,7 +6,7 @@
 library(tidylog)
 
 # Useful custom functions ----
-## Look up an individual envelope ID number to see its info
+## Look up an individual envelope ID number to see its info ----
 # Modify the select() to change which data are displayed
 check = function(barcode) {
   data = durin |>
@@ -190,3 +190,28 @@ error.durin.height = durin |>
 
 # make manual judgement calls about which height needs correcting using Excel (sorry...)
 write.csv(error.durin.height, "output/error.durin.height.comparison.csv")
+
+
+# Look up past attempts to fix errors ----
+# Curious if someone has already tried to fix the error you found?
+# This object and function will check if an individual envelope has already been inspected
+# and tell you the outcome of that inspection.
+# You need to download the data check tabs from the big Google Sheet
+# NOTE that Round 3 checks have NOT been completed as of 2023.09.11
+
+# Compile check object
+envelope.checks = read.csv("raw_data/DURIN Plant Functional Traits - 2023.07.31_Rd1_MeasurementChecks.csv") |>
+  mutate(round = "1") |>
+  bind_rows(read.csv("raw_data/DURIN Plant Functional Traits - Rd 2 measurement checks.csv")) |>
+  mutate(round = replace_na(round, "2")) |>
+  bind_rows(read.csv("raw_data/DURIN Plant Functional Traits - Rd 3 measurement checks.csv")) |>
+  mutate(round = replace_na(round, "3")) |>
+  select(-c(Variable_data, Explanation, Variable.to.fix_data, X)) |>
+  relocate(envelope_ID, Variable.with.error, Supporting.Text.Comment, Fix)
+
+# Function to look up fixes
+check.fix = function(barcode){
+  data = envelope.checks |>
+    filter(envelope_ID == barcode)
+  data
+}
