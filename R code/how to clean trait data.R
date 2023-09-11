@@ -191,6 +191,37 @@ error.durin.height = durin |>
 # make manual judgement calls about which height needs correcting using Excel (sorry...)
 write.csv(error.durin.height, "output/error.durin.height.comparison.csv")
 
+## Are all values sensible in relation to the mean values? ----
+### Calculate means
+library(rstatix)
+durin.means = durin |>
+  select(plant_height:leaf_thickness_3_mm) |>
+  get_summary_stats(type = "mean_ci")
+
+### Thickness errors ----
+error.durin.thickness = durin |>
+  # Values pulled from durin.means object
+  filter(leaf_thickness_1_mm > 0.278*10 |
+           leaf_thickness_2_mm > 0.280*10 |
+           leaf_thickness_3_mm > 0.321*10 |
+           leaf_thickness_1_mm < 0.278/10 |
+           leaf_thickness_2_mm < 0.280/10 |
+           leaf_thickness_3_mm < 0.321/10) |>
+  relocate(c(leaf_thickness_1_mm, leaf_thickness_2_mm, leaf_thickness_3_mm), .after = envelope_ID)
+
+### Weight errors ----
+error.durin.weight = durin |>
+  # Values pulled from durin.means object
+  filter(wet_mass_g > 0.025 *10 |
+           wet_mass_g < 0.025/10) |>
+  relocate(wet_mass_g, .after = envelope_ID)
+
+### Height errors ----
+error.durin.height = durin |>
+  # Values pulled from durin.means object
+  filter(plant_height > 17.258 * 5 |
+           plant_height < 17.258/10) |>
+  relocate(plant_height, .after = envelope_ID)
 
 # Look up past attempts to fix errors ----
 # Curious if someone has already tried to fix the error you found?
