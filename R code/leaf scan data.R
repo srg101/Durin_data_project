@@ -244,10 +244,9 @@ na.check.AllPiScans = na.check |>
 na.check.stillmissing = na.check |>
   anti_join(AllPiScans)
 
-write.csv(na.check.stillmissing, "output/2023.09.07_StillMissingScans.csv")
+write.csv(na.check.stillmissing, "output/2023.09.12_StillMissingScans.csv")
 
-na.check.Lygra = na.check.stillmissing |>
-  filter(siteID == "Lygra") |>
+na.check.recollect = na.check.stillmissing |>
   mutate(spp.code = case_when(
     species == "Calluna vulgaris" ~ "CV",
     species == "Vaccinium vitis-idaea" ~ "VV",
@@ -256,14 +255,16 @@ na.check.Lygra = na.check.stillmissing |>
     TRUE ~ "unknown"
   ),
     plotID = case_when(
-    is.na(DURIN_plot) ~ paste0(ageClass, DroughtTrt, spp.code),
+    is.na(DURIN_plot) ~ paste0(ageClass, DroughtTrt, DroughNet_plotID, spp.code),
     is.na(ageClass) ~ DURIN_plot,
     TRUE ~ "unknown"
  ),
  missing.code = paste(plotID, "-", plant_nr)
-  )
+  ) |>
+  group_by(siteID, plotID, missing.code) |>
+  summarize(n = length(envelope_ID))
 
-table(na.check.Lygra$missing.code)
+write.csv(na.check.recollect, "output/2023.09.12_PlantsToReCollect.csv")
 
 # Export for Sonya
 table(na.check.AllPiScans$filepath)
