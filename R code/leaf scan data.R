@@ -261,10 +261,10 @@ na.check.recollect = na.check.stillmissing |>
  ),
  missing.code = paste(plotID, "-", plant_nr)
   ) |>
-  group_by(siteID, plotID, missing.code) |>
+  group_by(siteID, plotID, missing.code, leaf_age) |>
   summarize(n = length(envelope_ID))
 
-write.csv(na.check.recollect, "output/2023.09.12_PlantsToReCollect.csv")
+write.csv(na.check.recollect, "output/2023.09.13_PlantsToReCollect.csv")
 
 # Export for Sonya
 table(na.check.AllPiScans$filepath)
