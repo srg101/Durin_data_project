@@ -29,6 +29,7 @@ tempDURIN <- map_df(set_names(filesDURIN), function(file) {
   select(-X) |>
   # Code in the prioritizing for keeping duplicates
   mutate(priority = case_when(
+    str_detect(File, "round2") ~ 0,
     str_detect(File, "Edit") ~ 1,
     str_detect(File, "Found") ~ 2,
     TRUE ~ 3
@@ -37,7 +38,7 @@ tempDURIN <- map_df(set_names(filesDURIN), function(file) {
 str(tempDURIN)
 
 # Export data for upload to OSF
-write.csv(tempDURIN, "output/2023.09.11_LeafScanData_Raw.csv")
+write.csv(tempDURIN, "output/2023.09.15_LeafScanData_Raw.csv")
 
 # Clean data ----
 leafscans.clean = tempDURIN |>
@@ -46,9 +47,14 @@ leafscans.clean = tempDURIN |>
   # Choose edited and found over original
   group_by(envelope_ID) |>
   slice_min(priority) |>
+  # Rename the known 'out.jpeg' scans
+  mutate(envelope_ID = case_when(
+    envelope_ID == "out.jpe" & File == "raw_data/leaf_scans/DURIN_2023_Leaf_Areas/Tjotta_2023.07.06Spock_leaf_area.csv" ~ "ECT1801",
+    envelope_ID == "out.jpe" & File == "raw_data/leaf_scans/DURIN_2023_Leaf_Areas/Senja_2023-07-11_deathstar_leaf_area.csv" ~ "BQV6602",
+    TRUE ~ envelope_ID)) |>
   # We have some honest duplicates thanks to the 22 Jun mixup
   # Use distinct to get rid of those
-  select(-File) |>
+  dplyr::select(-c(File)) |>
   distinct() |>
   # Remove doubled scans
   mutate(cutting = case_when(
@@ -78,6 +84,7 @@ durin.leafarea = read.csv("raw_data/2023.08.04_DURIN Plant Functional Traits_Lyg
   mutate(bulk_nr_leaves = case_when(
     envelope_ID %in% c("BFN9270", "BHY0712", "AYP7221", "ALA0711", "BHK3198",
                        "AUW3217") ~ bulk_nr_leaves_scanned,
+    envelope_ID %in% c("EES8345") ~ 2, # Leaf cut in half on scan
     TRUE ~ bulk_nr_leaves
   ),
   # Make updated bulk_nr_leaves tab
@@ -93,7 +100,7 @@ durin.test = read.csv("raw_data/2023.08.04_DURIN Plant Functional Traits_Lygra S
   mutate(bulk_nr_leaves_clean = coalesce(bulk_nr_leaves, bulk_nr_leaves_scanned)) |>
   relocate(c(bulk_nr_leaves_clean,bulk_nr_leaves_scanned,bulk_nr_leaves), .after = plant_height)
 
-na.check = durin.test |>
+na.check = durin.leafarea |>
   filter(is.na(leaf_area)) |>
   relocate(c(species, siteID, day, month, project, bulk_nr_leaves, bulk_nr_leaves_scanned), .after = envelope_ID) |>
   filter(project == "Field - Traits")
@@ -102,7 +109,7 @@ table(na.check$siteID)
 
 na.check |> group_by(species,siteID) |> summarize(n = length(day))
 
-write.csv(na.check, "output/2023.08.29_missing scans.csv")
+# write.csv(na.check, "output/2023.08.29_missing scans.csv")
 
 ## Check any mismatches in the scanned vs counted leaves ----
 ### Make file path object ----
@@ -114,7 +121,7 @@ scanpaths = tempDURIN |>
   slice_min(priority) |>
   select(envelope_ID, File)
 
-leafnr.check = durin.test |>
+leafnr.check = durin.leafarea |>
   # Only working with trait team leaves
   filter(project == "Field - Traits") |>
   select(envelope_ID, siteID, bulk_nr_leaves_scanned,bulk_nr_leaves) |>
@@ -128,7 +135,7 @@ leafnr.check = durin.test |>
   group_by(envelope_ID) |>
   slice_head()
 
-write.csv(leafnr.check, "output/2023.09.07_leafnr.check.csv")
+write.csv(leafnr.check, "output/2023.09.15_leafnr.check.csv")
 
 # Troubleshooting for missing scans -----
 
