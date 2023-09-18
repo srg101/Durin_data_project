@@ -289,3 +289,27 @@ file.mover = na.check.AllPiScans |>
 
 move_files(file.mover$filename, file.mover$destination)
 
+# Check matched leaf scan areas ----
+error.leafarea = tempDURIN |>
+  slice_head(by = ID) |>
+  slice_min(priority) |>
+  group_by(n, leaf_area) |>
+  filter(n()>1) |>
+  ungroup()
+
+# Sites and Envelope IDs
+sites = durin |>
+  select(envelope_ID, siteID) |>
+  rename(ID = envelope_ID)
+
+error.leafarea = tempDURIN |>
+  slice_head(by = ID) |>
+  group_by(ID) |>
+  slice_min(priority) |>
+  # join sites
+  left_join(sites) |>
+  group_by(siteID, n, leaf_area) |>
+  filter(n()>1) |>
+  ungroup()
+
+write.csv(error.leafarea, "output/2023.09.18_PossibleDuplicateLeaves.csv")
