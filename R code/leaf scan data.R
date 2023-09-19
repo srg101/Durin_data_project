@@ -1,3 +1,4 @@
+#### USE THIS PART TO CLEAN THE DATA ####
 # # Fetch the data -----
 library(tidyverse)
 library(dataDownloader)
@@ -26,26 +27,27 @@ tempDURIN <- map_df(set_names(filesDURIN), function(file) {
     set_names() %>%
     map_df(~ read.csv(file = file)) #important! reading in American format
 }, .id = "File") |>
-  select(-X) |>
-  # Code in the prioritizing for keeping duplicates
-  mutate(priority = case_when(
-    str_detect(File, "round2") ~ 0,
-    str_detect(File, "Edit") ~ 1,
-    str_detect(File, "Found") ~ 2,
-    TRUE ~ 3
-  ))
+  select(-X)
 
 str(tempDURIN)
 
 # Export data for upload to OSF
-write.csv(tempDURIN, "output/2023.09.15_LeafScanData_Raw.csv")
+write.csv(tempDURIN, "output/2023.09.19_LeafScanData_Raw.csv")
 
 # Clean data ----
 leafscans.clean = tempDURIN |>
   # Rename columns to match main dataset
   rename(envelope_ID = ID, bulk_nr_leaves_scanned = n) |>
   # Choose edited and found over original
+  # Code in the prioritizing for keeping duplicates
+  mutate(priority = case_when(
+    str_detect(File, "round2") ~ 0,
+    str_detect(File, "Edit") ~ 1,
+    str_detect(File, "Found") ~ 2,
+    TRUE ~ 3
+  )) |>
   group_by(envelope_ID) |>
+  # Select only the most relevant
   slice_min(priority) |>
   # Rename the known 'out.jpeg' scans
   mutate(envelope_ID = case_when(
@@ -73,7 +75,6 @@ dup.check = leafscans.clean |>
   filter(duplicated(envelope_ID))
 
 ## Code to add leaf areas to the main DURIN object ----
-
 # To be moved to the main cleaning script once finished
 durin.leafarea = read.csv("raw_data/2023.08.04_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
                           na.strings=c("","NA")) |>
@@ -91,6 +92,7 @@ durin.leafarea = read.csv("raw_data/2023.08.04_DURIN Plant Functional Traits_Lyg
   # Calculate specific leaf area
   mutate(SLA.wet = leaf_area/wet_mass_g)
 
+#### TROUBLESHOOTING SECTION ####
 # testing bulk leaf replacement function -----
 # https://stackoverflow.com/questions/50010196/replacing-na-values-from-another-dataframe-by-id
 durin.test = read.csv("raw_data/2023.08.04_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
