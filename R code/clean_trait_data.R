@@ -1,6 +1,8 @@
 # Manually clean errors ----
 durin = read.csv("raw_data/2023.07.20_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
                  na.strings=c("","NA")) |>
+  # Correct Senja
+  mutate(siteID = str_replace(siteID, "Senje", "Senja")) |>
   # Change plant height to numeric
   mutate(plant_height = as.numeric(plant_height)) |>
   # Correct plot names
@@ -203,4 +205,4 @@ durin = read.csv("raw_data/2023.07.20_DURIN Plant Functional Traits_Lygra Sognda
     )
   )
 
-# write.csv(durin, "output/2023.08.16_cleanDURIN.csv")
+# write.csv(durin, "output/2023.09.11_cleanDURIN.csv")
