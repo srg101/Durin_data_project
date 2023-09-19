@@ -12,12 +12,7 @@ get_file(node = "f4v9t",
          file = "DURIN_2023_Leaf_Areas.zip",
          path = "raw_data",
          remote_path = "Vegetation/raw_data/Leaf scans")
-
-<<<<<<< HEAD
 #Unzip leaf area data
-=======
-#Unzip microclimate data
->>>>>>> 19dee2ab916ad343b890098c7689eb5e1c116741
 unzip("raw_data/DURIN_2023_Leaf_Areas.zip", exdir = "raw_data/leaf_scans")
 file.remove("raw_data/DURIN_2023_Leaf_Areas.zip") #let's free some space
 
