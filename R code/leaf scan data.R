@@ -75,8 +75,7 @@ dup.check = leafscans.clean |>
 
 ## Code to add leaf areas to the main DURIN object ----
 # To be moved to the main cleaning script once finished
-durin.leafarea = read.csv("raw_data/2023.08.04_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
-                          na.strings=c("","NA")) |>
+durin.leafarea = durin |>
   # Join in the leaf area scans
   left_join(leafscans.clean) |>
   # Manually replace bulk_nr_leaves for ones the scanned number is more accurate
@@ -89,7 +88,11 @@ durin.leafarea = read.csv("raw_data/2023.08.04_DURIN Plant Functional Traits_Lyg
   # Make updated bulk_nr_leaves tab
   bulk_nr_leaves_clean = coalesce(bulk_nr_leaves, bulk_nr_leaves_scanned)) |>
   # Calculate specific leaf area
-  mutate(SLA.wet = leaf_area/wet_mass_g)
+  mutate(SLA.wet = leaf_area/wet_mass_g) |>
+  # Calculate individual leaf values
+  # Do this AFTER SLA calc to not do an average of an average
+  mutate(wet_mass_g = wet_mass_g/bulk_nr_leaves_clean,
+         leaf_area = leaf_area/bulk_nr_leaves_clean)
 
 #### TROUBLESHOOTING SECTION ####
 # testing bulk leaf replacement function -----
@@ -314,3 +317,36 @@ error.leafarea = tempDURIN |>
   ungroup()
 
 write.csv(error.leafarea, "output/2023.09.18_PossibleDuplicateLeaves.csv")
+
+# Outlier checks ----
+## SLA x Area ----
+ggplot(durin.leafarea |> drop_na(leaf_age),
+       aes(x = leaf_area, y = SLA.wet, color = leaf_age)) +
+  geom_point(alpha = 0.3) +
+  geom_point(data = durin.leafarea |> filter(envelope_ID %in% c("DQA1214", "DII6743", "ETH1438")), color = "red") +
+  facet_wrap(~species, scales = "free", ncol = 4) +
+  theme_bw()
+
+# From these visuals, we can estimate reasonable values
+error.SLAxArea = durin.leafarea |>
+  # Flag possible errors
+  mutate(flag_SLA = case_when(
+    species == "Calluna vulgaris" & (SLA.wet < 10 | SLA.wet > 50) ~ "CV SLA error",
+    species == "Empetrum nigrum" & (SLA.wet < 10 | SLA.wet > 60) ~ "EN SLA error",
+    species == "Vaccinium myrtillus" & (SLA.wet < 40 | SLA.wet > 125) ~ "VM SLA error",
+    species == "Vaccinium vitis-idaea" & (SLA.wet < 20 | SLA.wet > 55) ~ "VV SLA error",
+    TRUE ~ "okay"
+  ),
+  flag_area = case_when(
+    species == "Calluna vulgaris" & (leaf_area < 0 | leaf_area > 0.3) ~ "CV area error",
+    species == "Empetrum nigrum" & (leaf_area < 0 | leaf_area > 0.2) ~ "EN area error",
+    species == "Vaccinium myrtillus" & (leaf_area < 0 | leaf_area > 3.5) ~ "VM area error",
+    species == "Vaccinium vitis-idaea" & (leaf_area < 0 | leaf_area > 3) ~ "VV area error",
+    TRUE ~ "okay"
+  )) |>
+  filter(flag_SLA != "okay" | flag_area != "okay") |>
+  select(envelope_ID, flag_SLA, flag_area)
+
+ggsave("visualizations/2023.09.19_SLAxAreaErrors.png")
+
+write.csv(error.SLAxArea, "output/2023.09.19_SLAxAreaErrors.csv")
