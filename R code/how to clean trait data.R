@@ -20,6 +20,13 @@ check = function(barcode) {
 }
 
 # Metadata: Check leaves are correctly labelled ----
+## Young/old ----
+error.oldVM = durin |>
+  # Filter to young-only plants
+  filter(species %in% c("Calluna vulgaris", "Vaccinium myrtillus")) |>
+  # Filter to mislabelled leaf ages
+  filter(leaf_age == "old")
+
 ## DURIN plot info ----
 ### Does the envelope site match the plot site? ----
 error.durin.site = durin |>
