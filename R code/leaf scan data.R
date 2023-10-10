@@ -31,7 +31,7 @@ tempDURIN <- map_df(set_names(filesDURIN), function(file) {
 str(tempDURIN)
 
 # Export data for upload to OSF
-# write.csv(tempDURIN, "output/2023.09.19_LeafScanData_Raw.csv")
+# write.csv(tempDURIN, "output/2023.09.27_LeafScanData_Raw.csv")
 
 # Clean data ----
 leafscans.clean = tempDURIN |>
@@ -117,6 +117,13 @@ na.check |> group_by(species,siteID) |> summarize(n = length(day))
 ## Check any mismatches in the scanned vs counted leaves ----
 ### Make file path object ----
 scanpaths = tempDURIN |>
+  # Code in the prioritizing for keeping duplicates
+  mutate(priority = case_when(
+    str_detect(File, "round2") ~ 0,
+    str_detect(File, "Edit") ~ 1,
+    str_detect(File, "Found") ~ 2,
+    TRUE ~ 3
+  )) |>
   # Rename columns to match main dataset
   rename(envelope_ID = ID, bulk_nr_leaves_scanned = n) |>
   # Choose edited and found over original
@@ -295,6 +302,13 @@ move_files(file.mover$filename, file.mover$destination)
 
 # Check matched leaf scan areas ----
 error.leafarea = tempDURIN |>
+  # Code in the prioritizing for keeping duplicates
+  mutate(priority = case_when(
+    str_detect(File, "round2") ~ 0,
+    str_detect(File, "Edit") ~ 1,
+    str_detect(File, "Found") ~ 2,
+    TRUE ~ 3
+  )) |>
   slice_head(by = ID) |>
   slice_min(priority) |>
   group_by(n, leaf_area) |>
@@ -307,6 +321,13 @@ sites = durin |>
   rename(ID = envelope_ID)
 
 error.leafarea = tempDURIN |>
+  # Code in the prioritizing for keeping duplicates
+  mutate(priority = case_when(
+    str_detect(File, "round2") ~ 0,
+    str_detect(File, "Edit") ~ 1,
+    str_detect(File, "Found") ~ 2,
+    TRUE ~ 3
+  )) |>
   slice_head(by = ID) |>
   group_by(ID) |>
   slice_min(priority) |>
@@ -323,7 +344,7 @@ write.csv(error.leafarea, "output/2023.09.18_PossibleDuplicateLeaves.csv")
 ggplot(durin.leafarea |> drop_na(leaf_age),
        aes(x = leaf_area, y = SLA.wet, color = leaf_age)) +
   geom_point(alpha = 0.3) +
-  geom_point(data = durin.leafarea |> filter(envelope_ID %in% c("DQA1214", "DII6743", "ETH1438")), color = "red") +
+  # geom_point(data = durin.leafarea |> filter(envelope_ID %in% c("DQA1214", "DII6743", "ETH1438")), color = "red") +
   facet_wrap(~species, scales = "free", ncol = 4) +
   theme_bw()
 
