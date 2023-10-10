@@ -1,8 +1,10 @@
 # Manually clean errors ----
-durin = read.csv("raw_data/2023.07.20_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
+durin = read.csv("raw_data/2023.10.05_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
                  na.strings=c("","NA")) |>
   # Correct Senja
   mutate(siteID = str_replace(siteID, "Senje", "Senja")) |>
+  # Set all barcodes to uppercase
+  mutate(envelope_ID = str_to_upper(envelope_ID)) |>
   # Change plant height to numeric
   mutate(plant_height = as.numeric(plant_height)) |>
   # Correct plot names
