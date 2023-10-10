@@ -27,6 +27,14 @@ error.oldVM = durin |>
   # Filter to mislabelled leaf ages
   filter(leaf_age == "old")
 
+## Find duplicate barcodes ----
+error.duplicates = durin |>
+  # We don't care about exact duplicates so distinct() merges those
+  distinct() |>
+  # Then this filters to only duplicates
+  group_by(envelope_ID) %>%
+  filter(n() > 1)
+
 ## DURIN plot info ----
 ### Does the envelope site match the plot site? ----
 error.durin.site = durin |>
@@ -229,6 +237,17 @@ error.durin.height = durin |>
   filter(plant_height > 17.258 * 5 |
            plant_height < 17.258/10) |>
   relocate(plant_height, .after = envelope_ID)
+
+# Dry mass error checks ----
+## Which barcodes are duplicates? ----
+error.drymass.duplicate = read.csv("raw_data/2023.09.11_DURIN_drymass.csv") |>
+  # We don't care about exact duplicates so distinct() merges those
+  distinct() |>
+  # Then this filters to only duplicates
+  group_by(envelope_ID) %>%
+  filter(n() > 1)
+
+write.csv(error.drymass.duplicate, "output/2023.10.06_errorcheck_drymass.csv")
 
 # Look up past attempts to fix errors ----
 # Curious if someone has already tried to fix the error you found?
