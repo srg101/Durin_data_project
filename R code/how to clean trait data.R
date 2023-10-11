@@ -13,7 +13,8 @@ check = function(barcode) {
     select(envelope_ID, siteID,
            DURIN_plot, ageClass, DroughtTrt, DroughNet_plotID,
            plotNR, habitat,
-           species, plant_nr, leaf_nr, plant_height, wet_mass_g,
+           species, plant_nr, leaf_nr, leaf_age,
+           leaf_nr, plant_height, wet_mass_g,
            leaf_thickness_1_mm, leaf_thickness_2_mm, leaf_thickness_3_mm) |>
     filter(envelope_ID == barcode)
   data
@@ -262,6 +263,49 @@ table(error.massratio$flag)
 
 write.csv(error.massratio, "output/2023.10.10_error.massratio.csv")
 
+## Do SLA and leaf area hold an expected relationship? ----
+error.sla = durin |>
+  left_join(durin.drymass) |>
+  left_join(durin.area) |>
+  # Update bulk number of leaves
+  mutate(bulk_nr_leaves_clean = coalesce(bulk_nr_leaves, bulk_nr_leaves_scanned)) |>
+  # Calculate SLA and individual leaf area
+  mutate(SLA = leaf_area/dry_mass_g,
+         leaf_area_scaled = leaf_area/bulk_nr_leaves_clean)
+
+### Visualize outliers
+ggplot(error.sla,
+       aes(x = leaf_area_scaled, y = SLA, color = leaf_age)) +
+  geom_point(alpha = 0.3) +
+  # geom_point(data = durin.leafarea |> filter(envelope_ID %in% c("DQA1214", "DII6743", "ETH1438")), color = "red") +
+  facet_wrap(~species, scales = "free", ncol = 4) +
+  theme_bw()
+
+# From these visuals, we can estimate reasonable values
+error.SLAxArea = error.sla |>
+  # Flag possible errors
+  mutate(flag_SLA = case_when(
+    species == "Calluna vulgaris" & (SLA < 25 | SLA > 150) ~ "CV SLA error",
+    species == "Empetrum nigrum" & (SLA < 40 | SLA > 200) ~ "EN SLA error",
+    species == "Vaccinium myrtillus" & (SLA < 125 | SLA > 400) ~ "VM SLA error",
+    species == "Vaccinium vitis-idaea" & (SLA < 40 | SLA > 300) ~ "VV SLA error",
+    TRUE ~ "okay"
+  ),
+  flag_area = case_when(
+    species == "Calluna vulgaris" & (leaf_area_scaled < 0 | leaf_area_scaled > 0.3) ~ "CV area error",
+    species == "Empetrum nigrum" & (leaf_area_scaled < 0 | leaf_area_scaled > 0.2) ~ "EN area error",
+    species == "Vaccinium myrtillus" & (leaf_area_scaled < 0 | leaf_area_scaled > 3.5) ~ "VM area error",
+    species == "Vaccinium vitis-idaea" & (leaf_area_scaled < 0 | leaf_area_scaled > 3.5) ~ "VV area error",
+    TRUE ~ "okay"
+  )) |>
+  filter(flag_SLA != "okay" | flag_area != "okay") |>
+  select(envelope_ID, flag_SLA, flag_area) |>
+  distinct()
+
+ggsave("visualizations/2023.10.11_SLAxAreaErrors.png")
+
+write.csv(error.SLAxArea, "output/2023.10.11_SLAxAreaErrors.csv")
+
 ## Are all values sensible in relation to the mean values? ----
 ### Calculate means
 library(rstatix)
@@ -296,42 +340,30 @@ error.durin.height = durin |>
 
 # Dry mass error checks ----
 ## Which barcodes are duplicates? ----
-error.drymass.duplicate = read.csv("raw_data/2023.10.10_DryMassChecks.csv") |>
-  # Remove the columns not needed here
-  select(-c(X, order.entered)) |>
-  # We don't care about exact duplicates so distinct() merges those
-  distinct() |>
-  # Then this filters to only duplicates
-  group_by(envelope_ID) %>%
-  filter(n() > 1)
-
-write.csv(error.drymass.duplicate, "output/2023.10.06_errorcheck_drymass.csv")
-
 # Check for duplicates with different dry_mass_g entries
 error.drymass.duplicate = durin |>
-  # Remove the columns not needed here
-  select(-c(X, order.entered)) |>
+  left_join(durin.drymass) |>
   # We don't care about exact duplicates so distinct() merges those
+  select(envelope_ID, dry_mass_g) |>
   distinct() |>
   # Then this filters to only duplicates
   group_by(envelope_ID) %>%
   filter(n() > 1) |>
-  select(envelope_ID, dry_mass_g) |>
-  distinct() |>
   # Mark as duplicates
   mutate(flag = "one barcode, two dry_mass_g")
 
+# write.csv(error.drymass.duplicate, "output/2023.10.06_errorcheck_drymass.csv")
+
 ## Which barcodes are in the main datasheet but don't have dry mass? ----
 error.drymass.missing = durin |>
-  # Remove erroneous drymass column
-  select(-dry_mass_g) |>
   # Join correct drymass data
-  left_join(read.csv("raw_data/2023.10.10_DryMassChecks.csv")) |>
+  left_join(durin.drymass) |>
   # Filter to missing ones
   filter(is.na(dry_mass_g)) |>
   # Mark as missing
   mutate(flag = "missing dry_mass_g")
 
+# Double-check these aren't in the Lygra discarded barcodes
 error.drymass.missing.double = error.drymass.missing |>
   right_join(read.csv("raw_data/Lygra barcodes to discard - Sheet2.csv"))
 
@@ -354,7 +386,7 @@ error.drymass.extra = durin |>
   # Make a column to know this barcode is in the big datasheet
   mutate(present = "x") |>
   # Join DryMass list
-  right_join(read.csv("raw_data/2023.10.10_DryMassChecks.csv")) |>
+  right_join(durin.drymass) |>
   # Filter to barcodes that weren't in the main datasheet
   filter(is.na(present)) |>
   arrange(envelope_ID) |>
@@ -368,17 +400,21 @@ error.drymass.double = durin |>
   # Use a filtering join
   inner_join(error.drymass.extra)
 
-write.csv(error.drymass.extra, "output/2023.10.10_errorcheck_drymass_extra.csv")
+# write.csv(error.drymass.extra, "output/2023.10.10_errorcheck_drymass_extra.csv")
 
-## Make large object with all the different DryMassCheck errors
+## Make large object with all the different DryMassCheck errors ----
 error.drymass = error.drymass.duplicate |>
   bind_rows(error.drymass.extra, error.drymass.missing) |>
   # This object is from `barcode positions.R`
   left_join(barcodes) |>
   # Select relevant columns
   select(envelope_ID, dry_mass_g, barcode_below, barcode_above, flag) |>
+  distinct() |>
   arrange(envelope_ID) |>
-  write.csv("output/2023.10.10_error.drymass_with.barcodes.csv")
+  write.csv("output/2023.10.11_error.drymass_with.barcodes.csv")
+
+# Scanning error checks ----
+## Does SLA x area look right?
 
 # Look up past attempts to fix errors ----
 # Curious if someone has already tried to fix the error you found?
