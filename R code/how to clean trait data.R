@@ -206,6 +206,62 @@ error.durin.height = durin |>
 # make manual judgement calls about which height needs correcting using Excel (sorry...)
 write.csv(error.durin.height, "output/error.durin.height.comparison.csv")
 
+## Do wet and dry mass hold an expected relationship? ----
+library(ggh4x)
+
+ggplot(durin |> mutate(dry_mass_g = as.numeric(dry_mass_g)),
+       aes(x = wet_mass_g, y = dry_mass_g, color = leaf_age)) +
+  geom_point(alpha = 0.5) +
+  geom_point(data = (durin |> mutate(dry_mass_g = as.numeric(dry_mass_g)) |>
+                       filter(envelope_ID %in% c("BFB6702", "BFF4986"))),
+             color = "red") +
+  facet_wrap2(~species, scales = "free") +
+  theme_bw()
+
+ggplot(durin |> mutate(dry_mass_g = as.numeric(dry_mass_g))|>
+         mutate(mass_ratio = dry_mass_g/wet_mass_g),
+       aes(x = species, y = mass_ratio, color = leaf_age)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_point(position = position_jitterdodge()) +
+  facet_wrap2(~species, scales = "free") +
+  theme_bw()
+
+# Identify the outliers
+error.massratio = durin |>
+  # Make dry mass numeric
+  mutate(dry_mass_g = as.numeric(dry_mass_g)) |>
+  # Make ratio of dry to wet mass
+  mutate(mass_ratio = dry_mass_g/wet_mass_g) |>
+  # Outlier values are eyeballed from the above graph
+  mutate(flag = case_when(
+    species == "Calluna vulgaris" & wet_mass_g > 0.1 ~ "high wet_mass_g",
+    species == "Calluna vulgaris" & dry_mass_g > 0.007 ~ "high dry_mass_g",
+    species == "Empetrum nigrum" & wet_mass_g > 0.05 ~ "high wet_mass_g",
+    species == "Empetrum nigrum" & dry_mass_g > 0.01 ~ "high dry_mass_g",
+    species == "Vaccinium myrtillus" & wet_mass_g > 0.1 ~ "high wet_mass_g",
+    species == "Vaccinium myrtillus" & dry_mass_g > 0.027 ~ "high dry_mass_g",
+    species == "Vaccinium vitis-idaea" & wet_mass_g > 0.25 ~ "high wet_mass_g",
+    species == "Vaccinium vitis-idaea" & dry_mass_g > 0.075 ~ "high dry_mass_g",
+    species == "Calluna vulgaris" & mass_ratio > 0.75 ~ "high dry to wet mass ratio",
+    species == "Empetrum nigrum" & mass_ratio > 0.75 ~ "high dry to wet mass ratio",
+    species == "Vaccinium myrtillus" & mass_ratio > 0.6 ~ "high dry to wet mass ratio",
+    species == "Vaccinium myrtillus" & mass_ratio < 0.2 ~ "low dry to wet mass ratio",
+    species == "Vaccinium vitis-idaea" & mass_ratio > 0.75 ~ "high dry to wet mass ratio",
+    species == "Vaccinium vitis-idaea" & mass_ratio < 0.2 ~ "low dry to wet mass ratio",
+    wet_mass_g <= dry_mass_g ~ "wet mass less than dry mass",
+    TRUE ~ "ok"
+  )) |>
+  # Filter to the problem columns
+  filter(flag != "ok")|>
+  # Prep for the envelope check sheet
+  mutate(`Supporting Text Comment` = paste0("Check envelope", ". ", flag)) |>
+  select(envelope_ID, `Supporting Text Comment`) |>
+  arrange(`Supporting Text Comment`)
+
+table(error.massratio$flag)
+
+write.csv(error.massratio, "output/2023.10.10_error.massratio.csv")
+
 ## Are all values sensible in relation to the mean values? ----
 ### Calculate means
 library(rstatix)
@@ -240,7 +296,9 @@ error.durin.height = durin |>
 
 # Dry mass error checks ----
 ## Which barcodes are duplicates? ----
-error.drymass.duplicate = read.csv("raw_data/2023.09.11_DURIN_drymass.csv") |>
+error.drymass.duplicate = read.csv("raw_data/2023.10.10_DryMassChecks.csv") |>
+  # Remove the columns not needed here
+  select(-c(X, order.entered)) |>
   # We don't care about exact duplicates so distinct() merges those
   distinct() |>
   # Then this filters to only duplicates
@@ -248,6 +306,79 @@ error.drymass.duplicate = read.csv("raw_data/2023.09.11_DURIN_drymass.csv") |>
   filter(n() > 1)
 
 write.csv(error.drymass.duplicate, "output/2023.10.06_errorcheck_drymass.csv")
+
+# Check for duplicates with different dry_mass_g entries
+error.drymass.duplicate = durin |>
+  # Remove the columns not needed here
+  select(-c(X, order.entered)) |>
+  # We don't care about exact duplicates so distinct() merges those
+  distinct() |>
+  # Then this filters to only duplicates
+  group_by(envelope_ID) %>%
+  filter(n() > 1) |>
+  select(envelope_ID, dry_mass_g) |>
+  distinct() |>
+  # Mark as duplicates
+  mutate(flag = "one barcode, two dry_mass_g")
+
+## Which barcodes are in the main datasheet but don't have dry mass? ----
+error.drymass.missing = durin |>
+  # Remove erroneous drymass column
+  select(-dry_mass_g) |>
+  # Join correct drymass data
+  left_join(read.csv("raw_data/2023.10.10_DryMassChecks.csv")) |>
+  # Filter to missing ones
+  filter(is.na(dry_mass_g)) |>
+  # Mark as missing
+  mutate(flag = "missing dry_mass_g")
+
+error.drymass.missing.double = error.drymass.missing |>
+  right_join(read.csv("raw_data/Lygra barcodes to discard - Sheet2.csv"))
+
+write.csv(error.drymass.missing, "output/2023.10.10_errorcheck_drymass_missing.csv")
+
+## Which barcodes are in the DryMassCheck sheet but not the main spreadsheet? ----
+error.drymass.extra = durin |>
+  # Bring together both the leaf barcodes and cutout barcodes
+  # This is weird but probably works
+  # Select the smaller list of barcodes
+  select(cutout_barcode) |>
+  # Remove the NAs
+  drop_na() |>
+  # Rename so the bind works
+  rename(envelope_ID = cutout_barcode) |>
+  # Bind in the larger list of barcodes
+  bind_rows(durin) |>
+  # Select the only relevant column
+  select(envelope_ID) |>
+  # Make a column to know this barcode is in the big datasheet
+  mutate(present = "x") |>
+  # Join DryMass list
+  right_join(read.csv("raw_data/2023.10.10_DryMassChecks.csv")) |>
+  # Filter to barcodes that weren't in the main datasheet
+  filter(is.na(present)) |>
+  arrange(envelope_ID) |>
+  # Mark as extra
+  mutate(flag = "extra (in DryMassCheck but not main datasheet")
+
+## Double-check it's working with the cutouts
+error.drymass.double = durin |>
+  select(cutout_barcode) |>
+  rename(envelope_ID = cutout_barcode) |>
+  # Use a filtering join
+  inner_join(error.drymass.extra)
+
+write.csv(error.drymass.extra, "output/2023.10.10_errorcheck_drymass_extra.csv")
+
+## Make large object with all the different DryMassCheck errors
+error.drymass = error.drymass.duplicate |>
+  bind_rows(error.drymass.extra, error.drymass.missing) |>
+  # This object is from `barcode positions.R`
+  left_join(barcodes) |>
+  # Select relevant columns
+  select(envelope_ID, dry_mass_g, barcode_below, barcode_above, flag) |>
+  arrange(envelope_ID) |>
+  write.csv("output/2023.10.10_error.drymass_with.barcodes.csv")
 
 # Look up past attempts to fix errors ----
 # Curious if someone has already tried to fix the error you found?
