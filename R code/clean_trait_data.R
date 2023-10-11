@@ -34,7 +34,7 @@ durin.area = read.csv("output/2023.09.27_LeafScanData_Raw.csv") |>
   select(-c(cutting, X))
 
 # Manually clean errors from dry mass datasheet ----
-durin.drymass = read.csv("raw_data/2023.10.10_DryMassChecks.csv") |>
+durin.drymass = read.csv("raw_data/2023.10.10_DryMassChecks.csv", na.strings=c("","NA")) |>
   # Drop unused columns
   select(-c(X, order.entered)) |>
   # Remove example and non-data
@@ -54,7 +54,8 @@ durin.drymass = read.csv("raw_data/2023.10.10_DryMassChecks.csv") |>
     TRUE ~ dry_mass_g
   )) |>
   # Filter out known bad values/typos
-  filter(!(envelope_ID == "EPP7266" & dry_mass_g == 0.00558))
+  filter(!(envelope_ID == "EPP7266" & dry_mass_g == 0.00558)) |>
+  filter(is.na(flag_DryMass))
 
 # Manually clean errors from main datasheet ----
 durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
@@ -172,6 +173,8 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID == "AZE4205" ~ "LY_O_VM_1",
       envelope_ID == "AZJ4306" ~ "LY_O_VV_5",
       envelope_ID == "EGE6339" ~ "SE_F_VV_2",
+      # Species corrections
+      envelope_ID %in% c("AVI9865", "ATG1962", "AVY7377") ~ "LY_O_VV_4",
       TRUE ~ DURIN_plot
     ),
     # Correct habitats
@@ -286,12 +289,10 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
     ),
     # Correct species
     species = case_when(
-      envelope_ID =="ALL1763"~"Vaccinium vitis-idaea",
-      envelope_ID =="AWF5086"~"Vaccinium vitis-idaea",
-      envelope_ID =="BBM8747"~"Vaccinium vitis-idaea",
-      envelope_ID =="DAI1197"~"Vaccinium vitis-idaea",
-      envelope_ID =="DZX9994"~"Vaccinium vitis-idaea",
-      envelope_ID =="BLM2549"~"Vaccinium vitis-idaea",
+      envelope_ID %in% c("ALL1763", "AWF5086", "BBM8747",
+                         "DAI1197", "DZX9994", "BLM2549",
+                         "AVI9865", "ATG1962", "AVY7377") ~ "Vaccinium vitis-idaea",
+
       TRUE ~ species
     ),
     # Correct wet mass
@@ -337,7 +338,7 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       DURIN_plot == "LY_F_EN_5" & plant_nr == 1 ~ 28.0,
       DURIN_plot == "LY_O_EN_1" & plant_nr == 1 ~ 10.2,
       DURIN_plot == "LY_O_EN_3" & plant_nr == 3 ~ 14.2,
-      DURIN_plot == "LY_O_EN_4" & plant_nr == 2 ~ 16.4,
+      # DURIN_plot == "LY_O_EN_4" & plant_nr == 2 ~ 16.4,
       DURIN_plot == "SE_O_VM_3" & plant_nr == 2 ~ 15.5,
       DURIN_plot == "SE_O_VM_3" & plant_nr == 3 ~ 17.2,
       DURIN_plot == "SE_O_VV_3" & plant_nr == 3 ~ 18.4,
@@ -345,11 +346,15 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       TRUE ~ plant_height
     )
   ) |>
-  # Filter out any complete duplicates
-  distinct() |>
   # Filter out known bad values/typos
   filter(!(envelope_ID == "CVP9320" & wet_mass_g == 0.4470)) |>
-  filter(!(envelope_ID == "BKI4712" & species == "Calluna vulgaris"))
+  filter(!(envelope_ID == "BKI4712" & species == "Calluna vulgaris")) |>
+  filter(is.na(flag)) |>
+  # Add dry mass and area
+  left_join(durin.drymass) |>
+  left_join(durin.area) |>
+  # Filter out any complete duplicates
+  distinct()
 
 
 # write.csv(durin, "output/2023.09.11_cleanDURIN.csv")
