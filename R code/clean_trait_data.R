@@ -1,5 +1,5 @@
 # Manually clean errors ----
-durin = read.csv("raw_data/2023.10.05_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
+durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
                  na.strings=c("","NA")) |>
   # Correct Senja
   mutate(siteID = str_replace(siteID, "Senje", "Senja")) |>
