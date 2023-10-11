@@ -50,7 +50,7 @@ leafscans.clean = tempDURIN |>
   slice_min(priority) |>
   # Rename the known 'out.jpeg' scans
   mutate(envelope_ID = case_when(
-    envelope_ID == "out.jpe" & File == "raw_data/leaf_scans/DURIN_2023_Leaf_Areas/Tjotta_2023.07.06Spock_leaf_area.csv" ~ "ECT1801",
+    envelope_ID == "out.jpe" & File == "raw_data/leaf_scans/DURIN_2023_Leaf_Areas/Tjotta_2023.07.06Spock_leaf_area.csv" ~ "ECT1701",
     envelope_ID == "out.jpe" & File == "raw_data/leaf_scans/DURIN_2023_Leaf_Areas/Senja_2023-07-11_deathstar_leaf_area.csv" ~ "BQV6602",
     TRUE ~ envelope_ID)) |>
   # We have some honest duplicates thanks to the 22 Jun mixup
