@@ -1,4 +1,62 @@
-# Manually clean errors ----
+# Manually clean errors from leaf area scanning datasheet ----
+durin.area = read.csv("output/2023.09.27_LeafScanData_Raw.csv") |>
+  # Rename columns to match main dataset
+  rename(envelope_ID = ID, bulk_nr_leaves_scanned = n) |>
+  # Choose edited and found over original
+  # Code in the prioritizing for keeping duplicates
+  mutate(priority = case_when(
+    str_detect(File, "round2") ~ 0,
+    str_detect(File, "Edit") ~ 1,
+    str_detect(File, "Found") ~ 2,
+    TRUE ~ 3
+  )) |>
+  group_by(envelope_ID) |>
+  # Select only the most relevant
+  slice_min(priority) |>
+  # Rename the known 'out.jpeg' scans
+  mutate(envelope_ID = case_when(
+    envelope_ID == "out.jpe" & File == "raw_data/leaf_scans/DURIN_2023_Leaf_Areas/Tjotta_2023.07.06Spock_leaf_area.csv" ~ "ECT1701",
+    envelope_ID == "out.jpe" & File == "raw_data/leaf_scans/DURIN_2023_Leaf_Areas/Senja_2023-07-11_deathstar_leaf_area.csv" ~ "BQV6602",
+    TRUE ~ envelope_ID)) |>
+  # We have some honest duplicates thanks to the 22 Jun mixup
+  # Use distinct to get rid of those
+  dplyr::select(-c(File)) |>
+  distinct() |>
+  # Remove doubled scans
+  mutate(cutting = case_when(
+    # One phys team scan has two values
+    # Keeping the earliest one
+    envelope_ID == "BLB9742" & leaf_area < 4.9 ~ "cut",
+    # Duplicates of 'out.jpeg' will need solving at some point
+    envelope_ID == "out.jpe" ~ "cut",
+    TRUE ~ "keep")) |>
+  filter(cutting == "keep") |>
+  select(-c(cutting, X))
+
+# Manually clean errors from dry mass datasheet ----
+durin.drymass = read.csv("raw_data/2023.10.10_DryMassChecks.csv") |>
+  # Drop unused columns
+  select(-c(X, order.entered)) |>
+  # Remove example and non-data
+  filter(!envelope_ID %in% c("AAA0000", "Metal tins:")) |>
+  # Clean other errors with mutate
+  mutate(
+    # Replace erroneous 0s with NA
+    dry_mass_g = case_when(
+    envelope_ID %in% c("CTI1429", "AZL3403") ~ NA,
+    TRUE ~ dry_mass_g
+  ),
+  # Make dry mass a number
+  dry_mass_g = as.numeric(dry_mass_g),
+  # Add missing (known) values
+  dry_mass_g = case_when(
+    envelope_ID == "BED6774" ~ 0.01332,
+    TRUE ~ dry_mass_g
+  )) |>
+  # Filter out known bad values/typos
+  filter(!(envelope_ID == "EPP7266" & dry_mass_g == 0.00558))
+
+# Manually clean errors from main datasheet ----
 durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
                  na.strings=c("","NA")) |>
   # Correct Senja
@@ -7,8 +65,47 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
   mutate(envelope_ID = str_to_upper(envelope_ID)) |>
   # Change plant height to numeric
   mutate(plant_height = as.numeric(plant_height)) |>
-  # Correct plot names
+  # Remove erroneous dry_mass_g column
+  select(-dry_mass_g) |>
   mutate(
+    # Correct envelope_ID typos
+    envelope_ID = case_when(
+      envelope_ID=="JAN2188"~"JAN3188",
+      envelope_ID=="HAO2716"~"JAO2716",
+      envelope_ID=="JAW7909"~"JAQ7909",
+      envelope_ID=="JAU0506"~"JAU0406",
+      envelope_ID=="JAY5700"~"JAY4700",
+      envelope_ID=="JBT3257"~"JBT3247",
+      envelope_ID=="JEK8175"~"JEK6175",
+      envelope_ID=="JER2751"~"JER4751",
+      envelope_ID=="JEO2375"~"JEU2375",
+      envelope_ID=="JHA7525"~"JHX7525",
+      envelope_ID=="JHZ731"~"JHZ4732",
+      envelope_ID=="JIG7181"~"JIG7191",
+      envelope_ID=="JTP1340"~"JIP1340",
+      envelope_ID=="FIU6785"~"JIU6785",
+      envelope_ID=="JIBV7267"~"JIV7267",
+      envelope_ID=="JTX1029"~"JIZ1029",
+      envelope_ID=="JSB3462"~"JSE3462",
+      envelope_ID=="JSZ0260"~"JSZ0360",
+      envelope_ID=="JTM2490"~"JTM3490",
+      envelope_ID=="JOO6233"~"JUU6233",
+      envelope_ID=="JOY1879"~"JUY1879",
+      envelope_ID=="JVK2226"~"JVK2228",
+      envelope_ID=="JUW4653"~"JVW4653",
+      envelope_ID=="JUX1381"~"JVX1381",
+      envelope_ID=="HWY3758"~"JWY3758",
+      envelope_ID=="JXI9810"~"JXI9801",
+      envelope_ID=="HJYL5525"~"JYL5525",
+      envelope_ID=="AZG5994" ~ "AYG5994",
+      envelope_ID=="BJY3407" ~ "BJZ3407",
+      envelope_ID=="BMZ3737" ~ "BMY3737",
+      envelope_ID=="ECT1801" ~ "ECT1701",
+      envelope_ID=="EPO1348" ~ "EPO1378",
+      envelope_ID=="JSC1626" ~ "JSC1636",
+      envelope_ID=="BIY5546" ~ "BIZ5546",
+      TRUE ~ envelope_ID),
+    # Correct plot names
     DURIN_plot = case_when(
       envelope_ID =="DAP6500"~ "KA_F_VV_2",
       envelope_ID =="EXQ8322"~ "KA_O_EN_1",
@@ -64,6 +161,17 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       # Round two corrections
       envelope_ID == "EUJ5068" ~ "SE_O_VV_4",
       envelope_ID == "EUS4572" ~ "SE_F_VV_3",
+      # Missing plots to be entered
+      envelope_ID == "ARB1083" ~ "LY_O_EN_4",
+      envelope_ID == "ATE1699" ~ "LY_O_VM_3",
+      envelope_ID == "ATI1569" ~ "LY_O_VM_2",
+      envelope_ID == "ATX5549" ~ "LY_O_EN_2",
+      envelope_ID == "AYB7940" ~ "LY_O_EN_1",
+      envelope_ID == "AYP7221" ~ "LY_O_VV_2",
+      envelope_ID == "AYS6617" ~ "LY_O_VM_3",
+      envelope_ID == "AZE4205" ~ "LY_O_VM_1",
+      envelope_ID == "AZJ4306" ~ "LY_O_VV_5",
+      envelope_ID == "EGE6339" ~ "SE_F_VV_2",
       TRUE ~ DURIN_plot
     ),
     # Correct habitats
@@ -87,16 +195,42 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       # From round 2 corrections
       envelope_ID == "CLA4537" ~ "Open",
       envelope_ID == "CLE7064" ~ "Open",
+      # Missing plots to be entered
+      envelope_ID == "ARB1083" ~ "Open",
+      envelope_ID == "ATE1699" ~ "Open",
+      envelope_ID == "ATI1569" ~ "Open",
+      envelope_ID == "ATX5549" ~ "Open",
+      envelope_ID == "AYB7940" ~ "Open",
+      envelope_ID == "AYP7221" ~ "Open",
+      envelope_ID == "AYS6617" ~ "Open",
+      envelope_ID == "AZE4205" ~ "Open",
+      envelope_ID == "AZJ4306" ~ "Open",
+      envelope_ID == "EGE6339" ~ "Forested",
       TRUE ~ habitat
     ),
     # Correct plot numbers
-    # For some reason the case_when won't work
-    # Redo manually
-    # plotNR = case_when(
-    #   envelope_ID =="BFY4922" ~ 2,
-    #   TRUE ~ plotNR
-    # ),
-    plotNR = replace(plotNR, envelope_ID == "BFY4922", 2),
+    plotNR = case_when(
+      envelope_ID == "BFY4922" ~ 2,
+      # Missing plots to be entered
+      envelope_ID == "ARB1083" ~ 4,
+      envelope_ID == "ATE1699" ~ 3,
+      envelope_ID == "ATI1569" ~ 2,
+      envelope_ID == "ATX5549" ~ 2,
+      envelope_ID == "AYB7940" ~ 1,
+      envelope_ID == "AYP7221" ~ 2,
+      envelope_ID == "AYS6617" ~ 3,
+      envelope_ID == "AZE4205" ~ 1,
+      envelope_ID == "AZJ4306" ~ 5,
+      envelope_ID == "EGE6339" ~ 2,
+      TRUE ~ plotNR
+    ),
+    # Correct leaf numbers
+    leaf_nr = case_when(
+      envelope_ID %in% c("EEF0649", "AHC6687") ~ 1,
+      envelope_ID %in% c("AHD4843") ~ 2,
+      envelope_ID %in% c("AHE7194","AGT6887", "BMS6362","DDP2497") ~ 3,
+      TRUE ~ leaf_nr
+    ),
     # Correct leaf ages
     leaf_age = case_when(
       envelope_ID =="AZG5994"~"old",
@@ -105,6 +239,9 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID =="ASS9832"~"old",
       envelope_ID =="BBM8747"~"old",
       DroughNet_plotID == 7.3 & species == "Vaccinium myrtillus" ~ "young",
+      # Round 3 corrections
+      envelope_ID == "BMC0045" ~ "old",
+      envelope_ID == "CST5790" ~ "young",
       TRUE ~ leaf_age
     ),
     DroughNet_plotID = case_when(
@@ -118,6 +255,8 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID =="CSP7326"~0.259,
       # From round 2 corrections
       envelope_ID == "ASM6249" ~ 0.114,
+      # Round 3 corrections
+      envelope_ID == "AYX2273" ~ 0.248,
       TRUE ~ leaf_thickness_1_mm
     ),
     leaf_thickness_2_mm = case_when(
@@ -205,6 +344,12 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID == "ESC1744" ~ 18.5,
       TRUE ~ plant_height
     )
-  )
+  ) |>
+  # Filter out any complete duplicates
+  distinct() |>
+  # Filter out known bad values/typos
+  filter(!(envelope_ID == "CVP9320" & wet_mass_g == 0.4470)) |>
+  filter(!(envelope_ID == "BKI4712" & species == "Calluna vulgaris"))
+
 
 # write.csv(durin, "output/2023.09.11_cleanDURIN.csv")
