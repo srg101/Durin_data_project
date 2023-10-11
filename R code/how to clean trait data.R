@@ -154,10 +154,30 @@ nr.missing.list = as.list(error.durin.plantnr.missing$envelope_ID)
 ## SEE CODE ABOVE as this is done separately for DURIN and DroughtNet plots
 
 ### Leaf number ----
+check.plant = function(plot, plantnr) {
+  data = durin |>
+    select(envelope_ID, siteID,
+           DURIN_plot,
+           plotNR, habitat,
+           species, plant_nr, leaf_nr, leaf_age, plant_height) |>
+    filter(DURIN_plot == plot & plant_nr == plantnr) |>
+    arrange(plant_nr, leaf_age, leaf_nr)
+  data
+}
+
 # Which envelopes are missing leaf numbers?
 error.durin.leafnr.missing = durin |>
   # Filter to NA values
   filter(is.na(leaf_nr))
+
+# Which plants are missing leaves (or have extras)?
+error.durin.leaves = durin %>%
+  # Select just the relevant data
+  drop_na(DURIN_plot) |>
+  filter(project == "Field - Traits") |>
+  dplyr::group_by(siteID, DURIN_plot, plant_nr, leaf_age, calluna_shoot_type) %>%
+  dplyr::summarise(n = dplyr::n(), .groups = "drop") %>%
+  dplyr::filter(n != 3)
 
 ### Leaf age ----
 # Which envelopes are missing leaf ages?
@@ -210,14 +230,16 @@ write.csv(error.durin.height, "output/error.durin.height.comparison.csv")
 ## Do wet and dry mass hold an expected relationship? ----
 library(ggh4x)
 
-ggplot(durin |> mutate(dry_mass_g = as.numeric(dry_mass_g)),
+ggplot(durin,
        aes(x = wet_mass_g, y = dry_mass_g, color = leaf_age)) +
   geom_point(alpha = 0.5) +
-  geom_point(data = (durin |> mutate(dry_mass_g = as.numeric(dry_mass_g)) |>
-                       filter(envelope_ID %in% c("BFB6702", "BFF4986"))),
-             color = "red") +
+  # geom_point(data = (durin |> mutate(dry_mass_g = as.numeric(dry_mass_g)) |>
+  #                      filter(envelope_ID %in% c("BFB6702", "BFF4986"))),
+  #            color = "red") +
   facet_wrap2(~species, scales = "free") +
   theme_bw()
+
+ggsave("visualizations/2023.10.11_dry.wetMass.png")
 
 ggplot(durin |> mutate(dry_mass_g = as.numeric(dry_mass_g))|>
          mutate(mass_ratio = dry_mass_g/wet_mass_g),
@@ -226,6 +248,8 @@ ggplot(durin |> mutate(dry_mass_g = as.numeric(dry_mass_g))|>
   geom_point(position = position_jitterdodge()) +
   facet_wrap2(~species, scales = "free") +
   theme_bw()
+
+ggsave()
 
 # Identify the outliers
 error.massratio = durin |>
@@ -299,7 +323,7 @@ error.SLAxArea = error.sla |>
     TRUE ~ "okay"
   )) |>
   filter(flag_SLA != "okay" | flag_area != "okay") |>
-  select(envelope_ID, flag_SLA, flag_area) |>
+  select(envelope_ID, flag_SLA, flag_area, wet_mass_g, dry_mass_g, leaf_area, SLA) |>
   distinct()
 
 ggsave("visualizations/2023.10.11_SLAxAreaErrors.png")
