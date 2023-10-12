@@ -52,7 +52,14 @@ durin.drymass = read.csv("raw_data/2023.10.10_DryMassChecks.csv", na.strings=c("
   dry_mass_g = case_when(
     envelope_ID == "BED6774" ~ 0.01332,
     TRUE ~ dry_mass_g
-  )) |>
+  ),
+  # Correct typos
+  dry_mass_g = case_when(
+    envelope_ID == "JVU9850" ~ 0.00181,
+    envelope_ID == "FDV2375" ~ 0.00097,
+    TRUE ~ dry_mass_g
+  ),
+  ) |>
   # Filter out known bad values/typos
   filter(!(envelope_ID == "EPP7266" & dry_mass_g == 0.00558)) |>
   filter(is.na(flag_DryMass))
@@ -143,7 +150,7 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       # Missing plots to be entered
       envelope_ID == "ARB1083" ~ "LY_O_EN_4",
       envelope_ID == "ATI1569" ~ "LY_O_VM_2",
-      envelope_ID == "ATX5549" ~ "LY_O_EN_2",
+      envelope_ID %in% c("ATX5549", "AZM0806") ~ "LY_O_EN_2",
       envelope_ID == "AYB7940" ~ "LY_O_EN_1",
       envelope_ID == "AZE4205" ~ "LY_O_VM_1",
       envelope_ID == "AZJ4306" ~ "LY_O_VV_5",
@@ -159,14 +166,14 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID %in% c("EXQ8322", "EYR2971", "EYV3590", "EZA6532", "DFW2204", "EYG4750", "EYK4044",
                         "DHD0172","DHH3325", "DFM4890", "AZB3929", "CYR2242", "CZD0880","CLA4537",
                         "CLE7064","ARB1083","ATE1699", "ATI1569", "ATX5549", "AYB7940", "AYP7221",
-                        "AYS6617", "AZE4205", "AZJ4306") ~"Open",
+                        "AYS6617", "AZE4205", "AZJ4306", "AZM0806") ~"Open",
       envelope_ID %in% c("BIL0759", "EVA9626", "BOW7206", "EGE6339") ~ "Forested",
       TRUE ~ habitat
     ),
     # Correct plot numbers
     plotNR = case_when(
       envelope_ID %in% c("AYB7940", "AZE4205") ~ 1,
-      envelope_ID %in% c("BFY4922", "ATI1569", "ATX5549", "EGE6339", "AYP7221") ~ 2,
+      envelope_ID %in% c("BFY4922", "ATI1569", "ATX5549", "EGE6339", "AYP7221", "AZM0806") ~ 2,
       envelope_ID %in% c("ATE1699", "AYS6617") ~ 3,
       envelope_ID %in% c("BES9911", "BBO5089", "BBK5291", "ARB1083") ~ 4,
       envelope_ID == "AZJ4306" ~ 5,
@@ -209,6 +216,11 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID == "ASM6249" ~ 0.114,
       TRUE ~ leaf_thickness_2_mm
     ),
+    leaf_thickness_3_mm = case_when(
+      envelope_ID == "ABZ7857" ~ 0.114,
+      envelope_ID == "ADW3051" ~ 0.247,
+      TRUE ~ leaf_thickness_3_mm
+    ),
     # Correct plant heights
     plant_height = case_when(
       envelope_ID %in% c("AWH7022", "ARR7615") ~11.6,
@@ -239,6 +251,18 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
     envelope_ID =="ARK3594"~0.0282,
     envelope_ID =="AFH1727"~0.0333,
     envelope_ID =="BSD3874"~0.0468,
+    envelope_ID == "JUI8430" ~ 0.00748,
+    envelope_ID == "ADW3051" ~ 0.0200,
+    envelope_ID == "DQA1214" ~ 0.0068,
+    envelope_ID == "JCC1574" ~ 0.00896,
+    envelope_ID == "JCE7349" ~ 0.00815,
+    envelope_ID == "JCG7439" ~ 0.01350,
+    envelope_ID == "JFO8192" ~ 0.01213,
+    envelope_ID == "JIW0462" ~ 0.01127,
+    envelope_ID == "JTC4335" ~ 0.00849,
+    envelope_ID == "JTR2458" ~ 0.00896,
+    envelope_ID == "JUH4035" ~ 0.00895,
+    envelope_ID == "ABZ7857" ~ 0.0172,
     TRUE ~ wet_mass_g),
     # Correct Tjøtta plot switch
     DroughNet_plotID = case_when(
