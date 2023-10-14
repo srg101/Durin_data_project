@@ -13,7 +13,7 @@ check = function(barcode) {
     select(envelope_ID, siteID,
            DURIN_plot, ageClass, DroughtTrt, DroughNet_plotID,
            plotNR, habitat,
-           species, plant_nr, leaf_nr, leaf_age,
+           species, plant_nr, leaf_nr, leaf_age,leaf_area,
            leaf_nr, plant_height, wet_mass_g, dry_mass_g,
            leaf_thickness_1_mm, leaf_thickness_2_mm, leaf_thickness_3_mm) |>
     filter(envelope_ID == barcode)
@@ -230,16 +230,19 @@ write.csv(error.durin.height, "output/error.durin.height.comparison.csv")
 ## Do wet and dry mass hold an expected relationship? ----
 library(ggh4x)
 
+reweigh = c("BKI4712", "BPK3465", "BWL8722", "EPP7266", "JAO2716", "BKJ3045","BWM2473")
+
 ggplot(durin,
        aes(x = wet_mass_g, y = dry_mass_g, color = leaf_age)) +
   geom_point(alpha = 0.5) +
+  geom_point(data = durin |> filter(envelope_ID %in% reweigh), color = "red") +
   # geom_point(data = (durin |> mutate(dry_mass_g = as.numeric(dry_mass_g)) |>
   #                      filter(envelope_ID %in% c("BFB6702", "BFF4986"))),
   #            color = "red") +
   facet_wrap2(~species, scales = "free") +
   theme_bw()
 
-ggsave("visualizations/2023.10.11_dry.wetMass.png")
+ggsave("visualizations/2023.10.12_dry.wetMass_scaledtobulkleafnr.png")
 
 ggplot(durin |> mutate(dry_mass_g = as.numeric(dry_mass_g))|>
          mutate(mass_ratio = dry_mass_g/wet_mass_g),
@@ -273,7 +276,7 @@ error.massratio = durin |>
     species == "Vaccinium myrtillus" & mass_ratio < 0.2 ~ "low dry to wet mass ratio",
     species == "Vaccinium vitis-idaea" & mass_ratio > 0.75 ~ "high dry to wet mass ratio",
     species == "Vaccinium vitis-idaea" & mass_ratio < 0.2 ~ "low dry to wet mass ratio",
-    wet_mass_g <= dry_mass_g ~ "wet mass less than dry mass",
+    dry_mass_g > wet_mass_g ~ "dry mass more than wet mass",
     TRUE ~ "ok"
   )) |>
   # Filter to the problem columns
@@ -283,27 +286,24 @@ error.massratio = durin |>
   select(envelope_ID, `Supporting Text Comment`) |>
   arrange(`Supporting Text Comment`)
 
+# For some reason the flag for dry mass greater than wet doesn't work
 table(error.massratio$flag)
 
 write.csv(error.massratio, "output/2023.10.10_error.massratio.csv")
 
 ## Do SLA and leaf area hold an expected relationship? ----
-error.sla = durin |>
-  left_join(durin.drymass) |>
-  left_join(durin.area) |>
-  # Update bulk number of leaves
-  mutate(bulk_nr_leaves_clean = coalesce(bulk_nr_leaves, bulk_nr_leaves_scanned)) |>
-  # Calculate SLA and individual leaf area
-  mutate(SLA = leaf_area/dry_mass_g,
-         leaf_area_scaled = leaf_area/bulk_nr_leaves_clean)
-
 ### Visualize outliers
-ggplot(error.sla,
-       aes(x = leaf_area_scaled, y = SLA, color = leaf_age)) +
+# Make list of ones to reweigh
+reweigh = c("BKI4712", "BPK3465", "BWL8722", "EPP7266", "JAO2716", "BKJ3045","BWM2473")
+
+ggplot(durin,
+       aes(x = leaf_area, y = SLA, color = leaf_age)) +
   geom_point(alpha = 0.3) +
-  # geom_point(data = durin.leafarea |> filter(envelope_ID %in% c("DQA1214", "DII6743", "ETH1438")), color = "red") +
+  geom_point(data = durin |> filter(envelope_ID %in% reweigh), color = "red") +
   facet_wrap(~species, scales = "free", ncol = 4) +
   theme_bw()
+
+ggsave("visualizations/2023.10.12_SLAxAreaErrors_scaledtobulkleafnr.png")
 
 # From these visuals, we can estimate reasonable values
 error.SLAxArea = error.sla |>
@@ -326,9 +326,7 @@ error.SLAxArea = error.sla |>
   select(envelope_ID, flag_SLA, flag_area, wet_mass_g, dry_mass_g, leaf_area, SLA) |>
   distinct()
 
-ggsave("visualizations/2023.10.11_SLAxAreaErrors.png")
-
-write.csv(error.SLAxArea, "output/2023.10.11_SLAxAreaErrors.csv")
+write.csv(error.SLAxArea, "output/2023.10.12_SLAxAreaErrors.csv")
 
 ## Are all values sensible in relation to the mean values? ----
 ### Calculate means
