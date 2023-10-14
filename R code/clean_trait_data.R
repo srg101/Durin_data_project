@@ -314,6 +314,25 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
   # Add dry mass and area
   left_join(durin.drymass) |>
   left_join(durin.area) |>
+  # Manually replace bulk_nr_leaves for ones the scanned number is more accurate
+  mutate(bulk_nr_leaves = case_when(
+    envelope_ID %in% c("BFN9270", "BHY0712", "AYP7221", "ALA0711", "BHK3198",
+                       "AUW3217") ~ bulk_nr_leaves_scanned,
+    envelope_ID %in% c("EES8345") ~ 2, # Leaf cut in half on scan
+    TRUE ~ bulk_nr_leaves
+  ),
+  # Make updated bulk_nr_leaves tab
+  bulk_nr_leaves_clean = coalesce(bulk_nr_leaves, bulk_nr_leaves_scanned)) |>
+  # Calculate values scaled to bulk leaves
+  rename(bulk_nr_leaves_original = bulk_nr_leaves, bulk_nr_leaves = bulk_nr_leaves_clean,
+         wet_mass_g_original = wet_mass_g, dry_mass_g_original = dry_mass_g,
+         leaf_area_original = leaf_area) |>
+  mutate(wet_mass_g = wet_mass_g_original/bulk_nr_leaves,
+         dry_mass_g = dry_mass_g_original/bulk_nr_leaves,
+         leaf_area = leaf_area_original/bulk_nr_leaves,
+         # SLA is calculated from aggregate, not scaled
+         SLA = leaf_area_original/dry_mass_g_original
+         ) |>
   # Filter out any complete duplicates
   distinct()
 
