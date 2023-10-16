@@ -51,6 +51,7 @@ durin.drymass = read.csv("raw_data/2023.10.10_DryMassChecks.csv", na.strings=c("
     # Add missing (known) values
     dry_mass_g = case_when(
       envelope_ID == "BED6774" ~ 0.01332,
+      envelope_ID == "BPK3465" ~ 0.00249,
       TRUE ~ dry_mass_g
     ),
     # Correct typos
@@ -189,7 +190,7 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
     ),
     # Correct leaf ages
     leaf_age = case_when(
-      envelope_ID %in% c("AZG5994", "ASS9832","BBM8747", "BMC0045", "BAG7477") ~"old",
+      envelope_ID %in% c("AZG5994", "ASS9832","BBM8747", "BMC0045", "BAG7477", "ETW7892") ~"old",
       envelope_ID %in% c("EVO1776", "EVS4445", "CST5790", "AYE1801", "BJN7368", "CHK1631",
                          "BAR6091") ~"young",
       DroughNet_plotID == 7.3 & species == "Vaccinium myrtillus" ~ "young",
@@ -214,6 +215,7 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID =="BPF4529"~0.221,
       # From round 2 corrections
       envelope_ID == "ASM6249" ~ 0.114,
+      envelope_ID == "EKS3555" ~ 0.258,
       TRUE ~ leaf_thickness_2_mm
     ),
     leaf_thickness_3_mm = case_when(
@@ -263,6 +265,7 @@ durin = read.csv("raw_data/2023.10.10_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID == "JTR2458" ~ 0.00896,
       envelope_ID == "JUH4035" ~ 0.00895,
       envelope_ID == "ABZ7857" ~ 0.0172,
+      envelope_ID == "EKS3555" ~ 0.00741,
       TRUE ~ wet_mass_g),
     # Correct Tjøtta plot switch
     DroughNet_plotID = case_when(
