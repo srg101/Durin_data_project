@@ -158,6 +158,7 @@ durin = read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID == "AZJ4306" ~ "LY_O_VV_5",
       envelope_ID == "EGE6339" ~ "SE_F_VV_2",
       envelope_ID == "BLM2549" ~ "LY_O_VV_1",
+      envelope_ID == "FIV6929" ~ "LY_F_CV_1",
       # Moving mislabelled plants (RANDOMLY SELECTED FROM PLOT WITH TOO MANY)
       envelope_ID %in% c("BES9911", "BBO5089", "BBK5291") ~ "LY_O_VV_4",
       # Species corrections
