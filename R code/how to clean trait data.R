@@ -13,7 +13,7 @@ check = function(barcode) {
     select(envelope_ID, siteID,
            DURIN_plot, ageClass, DroughtTrt, DroughNet_plotID,
            plotNR, habitat,
-           species, plant_nr, leaf_nr, leaf_age,leaf_area,
+           species, plant_nr, leaf_nr, leaf_age,leaf_area, calluna_shoot_type,
            leaf_nr, plant_height, wet_mass_g, dry_mass_g,
            leaf_thickness_1_mm, leaf_thickness_2_mm, leaf_thickness_3_mm) |>
     filter(envelope_ID == barcode)
@@ -74,6 +74,7 @@ error.durin.habitat = durin |>
   # Make it human readable
   relocate(c(habitat.assigned, habitat.abbrv), .after = envelope_ID)
 
+
 ### Does the PlotNR field match the DURIN plot number? ----
 error.durin.plotnr = durin |>
   #Filter to just DURIN
@@ -131,7 +132,6 @@ error.durin.plots = durin |>
   # Filter to the errors
   filter(n > max.plant.n)
 
-
 ## DroughtNet plot info ----
 ### ageClass -----
 ### Drought treatment ----
@@ -159,9 +159,10 @@ check.plant = function(plot, plantnr) {
     select(envelope_ID, siteID,
            DURIN_plot,
            plotNR, habitat,
-           species, plant_nr, leaf_nr, leaf_age, plant_height) |>
+           species, plant_nr, leaf_nr, leaf_age, plant_height,
+           calluna_shoot_type) |>
     filter(DURIN_plot == plot & plant_nr == plantnr) |>
-    arrange(plant_nr, leaf_age, leaf_nr)
+    arrange(plant_nr, calluna_shoot_type, leaf_age, leaf_nr)
   data
 }
 
@@ -189,8 +190,6 @@ error.durin.age.missing = durin |>
 
 age.missing.list = as.list(error.durin.age.missing$envelope_ID)
 
-
-
 # Data: Check that leaves are correctly measured ----
 ## Do plant heights match between fieldsheet and envelope? ----
 error.durin.height.W.fielddata = durin |>
@@ -212,10 +211,12 @@ write.csv(error.durin.height.Wfielddata, "output/error.durin.height.withFieldDat
 
 ## Do plant heights match between individual plants? ----
 error.durin.height = durin |>
+  # Filter out Phys team
+  filter(project == "Field - Traits") |>
   # make list of plants with more than one height
-  select(siteID, DURIN_plot, DroughNet_plotID, species, plant_nr, plant_height) |>
+  select(siteID, DURIN_plot, DroughNet_plotID, ageClass, species, plant_nr, plant_height) |>
   distinct() |>
-  group_by(siteID, DURIN_plot, DroughNet_plotID, species, plant_nr) |>
+  group_by(siteID, DURIN_plot, DroughNet_plotID, ageClass, species, plant_nr) |>
   summarize(n = length(plant_height)) |>
   filter(n > 1) |>
   # Join back in large dataset to find envelope IDs
@@ -249,6 +250,8 @@ ggplot(durin |> mutate(dry_mass_g = as.numeric(dry_mass_g))|>
        aes(x = species, y = mass_ratio, color = leaf_age)) +
   geom_boxplot(outlier.shape = NA) +
   geom_point(position = position_jitterdodge()) +
+  geom_point(data = durin |> mutate(mass_ratio = dry_mass_g/wet_mass_g) |>
+               filter(envelope_ID %in% reweigh), color = "red") +
   facet_wrap2(~species, scales = "free") +
   theme_bw()
 
@@ -283,7 +286,7 @@ error.massratio = durin |>
   filter(flag != "ok")|>
   # Prep for the envelope check sheet
   mutate(`Supporting Text Comment` = paste0("Check envelope", ". ", flag)) |>
-  select(envelope_ID, `Supporting Text Comment`) |>
+  select(envelope_ID, `Supporting Text Comment`, mass_ratio) |>
   arrange(`Supporting Text Comment`)
 
 # For some reason the flag for dry mass greater than wet doesn't work
@@ -338,26 +341,26 @@ durin.means = durin |>
 ### Thickness errors ----
 error.durin.thickness = durin |>
   # Values pulled from durin.means object
-  filter(leaf_thickness_1_mm > 0.278*10 |
-           leaf_thickness_2_mm > 0.280*10 |
+  filter(leaf_thickness_1_mm > 0.290*10 |
+           leaf_thickness_2_mm > 0.412*10 |
            leaf_thickness_3_mm > 0.321*10 |
-           leaf_thickness_1_mm < 0.278/10 |
-           leaf_thickness_2_mm < 0.280/10 |
+           leaf_thickness_1_mm < 0.290/10 |
+           leaf_thickness_2_mm < 0.412/10 |
            leaf_thickness_3_mm < 0.321/10) |>
   relocate(c(leaf_thickness_1_mm, leaf_thickness_2_mm, leaf_thickness_3_mm), .after = envelope_ID)
 
 ### Weight errors ----
 error.durin.weight = durin |>
   # Values pulled from durin.means object
-  filter(wet_mass_g > 0.025 *10 |
-           wet_mass_g < 0.025/10) |>
+  filter(wet_mass_g > 0.021 *10 |
+           wet_mass_g < 0.021/10) |>
   relocate(wet_mass_g, .after = envelope_ID)
 
 ### Height errors ----
 error.durin.height = durin |>
   # Values pulled from durin.means object
-  filter(plant_height > 17.258 * 5 |
-           plant_height < 17.258/10) |>
+  filter(plant_height > 19.487 * 5 |
+           plant_height < 19.487/10) |>
   relocate(plant_height, .after = envelope_ID)
 
 # Dry mass error checks ----
@@ -378,10 +381,8 @@ error.drymass.duplicate = durin |>
 
 ## Which barcodes are in the main datasheet but don't have dry mass? ----
 error.drymass.missing = durin |>
-  # Join correct drymass data
-  left_join(durin.drymass) |>
   # Filter to missing ones
-  filter(is.na(dry_mass_g)) |>
+  filter(is.na(dry_mass_g_original)) |>
   # Mark as missing
   mutate(flag = "missing dry_mass_g")
 
@@ -389,7 +390,7 @@ error.drymass.missing = durin |>
 error.drymass.missing.double = error.drymass.missing |>
   right_join(read.csv("raw_data/Lygra barcodes to discard - Sheet2.csv"))
 
-write.csv(error.drymass.missing, "output/2023.10.10_errorcheck_drymass_missing.csv")
+write.csv(error.drymass.missing, "output/2023.10.17_errorcheck_drymass_missing.csv")
 
 ## Which barcodes are in the DryMassCheck sheet but not the main spreadsheet? ----
 error.drymass.extra = durin |>
