@@ -306,7 +306,7 @@ ggplot(durin,
   facet_wrap(~species, scales = "free", ncol = 4) +
   theme_bw()
 
-ggsave("visualizations/2023.10.12_SLAxAreaErrors_scaledtobulkleafnr.png")
+ggsave("visualizations/2023.10.18_SLAxAreaErrors_scaledtobulkleafnr.png")
 
 # From these visuals, we can estimate reasonable values
 error.SLAxArea = error.sla |>
