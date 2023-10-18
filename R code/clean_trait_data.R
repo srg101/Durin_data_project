@@ -41,32 +41,22 @@ durin.drymass = read.csv("raw_data/2023.10.17_DryMassChecks.csv", na.strings=c("
   filter(!envelope_ID %in% c("AAA0000", "Metal tins:")) |>
   # Clean other errors with mutate
   mutate(
-    # Replace erroneous 0s with NA
-    dry_mass_g = case_when(
-      envelope_ID %in% c("CTI1429", "AZL3403") ~ NA,
-      TRUE ~ dry_mass_g
-    ),
     # Make dry mass a number
     dry_mass_g = as.numeric(dry_mass_g),
-    # Add missing (known) values
     dry_mass_g = case_when(
+        # Replace erroneous 0s with NA
+      envelope_ID %in% c("CTI1429", "AZL3403") ~ NA,
+      # Add missing (known) values
       envelope_ID == "BPK3465" ~ 0.00249,
-      TRUE ~ dry_mass_g
-    ),
     # Update to reweighed values
-    dry_mass_g = case_when(
-      envelope_ID == "BKI4712" ~ 0.01521,
       envelope_ID == "BKJ3045" ~ 0.00228,
       envelope_ID == "BPK3465" ~ 0.00249,
-      envelope_ID == "BWL8722" ~ 0.05262,
-      envelope_ID == "BWM2473" ~ 0.00341,
       envelope_ID == "EPP7266" ~ 0.00529,
-      TRUE ~ dry_mass_g
-    ),
     # Correct typos
-    dry_mass_g = case_when(
       envelope_ID == "JVU9850" ~ 0.00181,
       envelope_ID == "FDV2375" ~ 0.00097,
+    # Replace outliers with NA
+      envelope_ID %in% c("BWL8722", "BKI4712", "BWM2473") ~ NA,
       TRUE ~ dry_mass_g
     ),
     # Remove any possible leading white space
@@ -288,7 +278,7 @@ durin = read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID == "ARE1168" ~ 0.0117,
       envelope_ID == "EEK9473" ~ 0.0110,
       envelope_ID %in% c("EVL2844", "AJT3009", "ADB4598", "EBR4362", "ANT4890",
-                         "BWM2473")  ~ NA,
+                         "BWM2473", "BWL8722", "BKI4712")  ~ NA,
       TRUE ~ wet_mass_g),
     # Correct Tjøtta plot switch
     DroughNet_plotID = case_when(
