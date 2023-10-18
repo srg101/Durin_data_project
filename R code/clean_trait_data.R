@@ -211,15 +211,12 @@ durin = read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID =="DSD6681"~0.0107,
       envelope_ID =="CSP7326"~0.259,
       envelope_ID == "APK0446" ~ 0.311,
-      # From round 2 corrections
       envelope_ID == "ASM6249" ~ 0.114,
-      # Round 3 corrections
       envelope_ID == "AYX2273" ~ 0.248,
       TRUE ~ leaf_thickness_1_mm
     ),
     leaf_thickness_2_mm = case_when(
       envelope_ID =="BPF4529"~0.221,
-      # From round 2 corrections
       envelope_ID == "ASM6249" ~ 0.114,
       envelope_ID == "EKS3555" ~ 0.258,
       TRUE ~ leaf_thickness_2_mm
@@ -250,7 +247,6 @@ durin = read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID %in% c("ALL1763", "AWF5086", "BBM8747",
                          "DAI1197", "DZX9994", "BLM2549",
                          "AVI9865", "ATG1962", "AVY7377") ~ "Vaccinium vitis-idaea",
-
       TRUE ~ species
     ),
     # Correct wet mass
@@ -335,8 +331,7 @@ durin = read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognda
   left_join(durin.area) |>
   # Manually replace bulk_nr_leaves for ones the scanned number is more accurate
   mutate(bulk_nr_leaves = case_when(
-    envelope_ID %in% c("BFN9270", "BHY0712", "AYP7221", "ALA0711", "BHK3198",
-                       "AUW3217") ~ bulk_nr_leaves_scanned,
+    envelope_ID %in% c("BFN9270", "BHY0712", "AYP7221", "ALA0711", "BHK3198", "AUW3217") ~ bulk_nr_leaves_scanned,
     envelope_ID == "ARE1168" ~ NA,
     envelope_ID %in% c("EES8345") ~ 2, # Leaf cut in half on scan
     TRUE ~ bulk_nr_leaves
