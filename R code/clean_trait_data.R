@@ -186,7 +186,7 @@ durin = read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognda
     ),
     # Correct leaf numbers
     leaf_nr = case_when(
-      envelope_ID %in% c("EEF0649", "AHC6687", "CIT4071", "EUZ2000", "AMR7444") ~ 1,
+      envelope_ID %in% c("EEF0649", "AHC6687", "CIT4071", "EUZ2000", "AMR7444", "BNK1425") ~ 1,
       envelope_ID %in% c("AHD4843", "ANK2313", "AXV2319") ~ 2,
       envelope_ID %in% c("AHE7194","AGT6887", "BMS6362","DDP2497", "BAL4872", "CWI7147",
                          "DBE4796", "EVX2488", "ASP1768", "ESX2028", "AAV7693", "ARV5470",
