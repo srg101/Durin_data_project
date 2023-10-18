@@ -231,19 +231,13 @@ write.csv(error.durin.height, "output/error.durin.height.comparison.csv")
 ## Do wet and dry mass hold an expected relationship? ----
 library(ggh4x)
 
-reweigh = c("BKI4712", "BPK3465", "BWL8722", "EPP7266", "JAO2716", "BKJ3045","BWM2473")
-
 ggplot(durin,
        aes(x = wet_mass_g, y = dry_mass_g, color = leaf_age)) +
   geom_point(alpha = 0.5) +
-  geom_point(data = durin |> filter(envelope_ID %in% reweigh), color = "red") +
-  # geom_point(data = (durin |> mutate(dry_mass_g = as.numeric(dry_mass_g)) |>
-  #                      filter(envelope_ID %in% c("BFB6702", "BFF4986"))),
-  #            color = "red") +
   facet_wrap2(~species, scales = "free") +
   theme_bw()
 
-ggsave("visualizations/2023.10.12_dry.wetMass_scaledtobulkleafnr.png")
+ggsave("visualizations/2023.10.18_dry.wetMass_scaledtobulkleafnr.png")
 
 ggplot(durin |> mutate(dry_mass_g = as.numeric(dry_mass_g))|>
          mutate(mass_ratio = dry_mass_g/wet_mass_g),
@@ -296,13 +290,10 @@ write.csv(error.massratio, "output/2023.10.10_error.massratio.csv")
 
 ## Do SLA and leaf area hold an expected relationship? ----
 ### Visualize outliers
-# Make list of ones to reweigh
-reweigh = c("BKI4712", "BPK3465", "BWL8722", "EPP7266", "JAO2716", "BKJ3045","BWM2473")
 
 ggplot(durin,
        aes(x = leaf_area, y = SLA, color = leaf_age)) +
   geom_point(alpha = 0.3) +
-  geom_point(data = durin |> filter(envelope_ID %in% reweigh), color = "red") +
   facet_wrap(~species, scales = "free", ncol = 4) +
   theme_bw()
 
