@@ -53,6 +53,16 @@ durin.drymass = read.csv("raw_data/2023.10.17_DryMassChecks.csv", na.strings=c("
       envelope_ID == "BPK3465" ~ 0.00249,
       TRUE ~ dry_mass_g
     ),
+    # Update to reweighed values
+    dry_mass_g = case_when(
+      envelope_ID == "BKI4712" ~ 0.01521,
+      envelope_ID == "BKJ3045" ~ 0.00228,
+      envelope_ID == "BPK3465" ~ 0.00249,
+      envelope_ID == "BWL8722" ~ 0.05262,
+      envelope_ID == "BWM2473" ~ 0.00341,
+      envelope_ID == "EPP7266" ~ 0.00529,
+      TRUE ~ dry_mass_g
+    ),
     # Correct typos
     dry_mass_g = case_when(
       envelope_ID == "JVU9850" ~ 0.00181,
@@ -277,8 +287,8 @@ durin = read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognda
       envelope_ID == "ASK2376" ~ 0.0081,
       envelope_ID == "ARE1168" ~ 0.0117,
       envelope_ID == "EEK9473" ~ 0.0110,
-      envelope_ID == "ANT4890" ~ 0.0600,
-      envelope_ID %in% c("EVL2844", "AJT3009")  ~ NA,
+      envelope_ID %in% c("EVL2844", "AJT3009", "ADB4598", "EBR4362", "ANT4890",
+                         "BWM2473")  ~ NA,
       TRUE ~ wet_mass_g),
     # Correct Tjøtta plot switch
     DroughNet_plotID = case_when(
@@ -357,4 +367,4 @@ durin = read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognda
   # Filter out any complete duplicates
   distinct()
 
-# write.csv(durin, "output/2023.09.11_cleanDURIN.csv")
+write.csv(durin, "output/DURIN_clean.csv")
