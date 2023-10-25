@@ -47,19 +47,16 @@ contains siteID, block number and treatment: Lyg1_open, Lyg1_forest
 |                    |                                                                                                        |                                                                   |
 | date               | Date of data collection                                                                                | yyyy-mm-dd; do not split year, month and day into several columns |
 | year               | Year of data collection                                                                                | yyyy; allowed if no specific date is available, try to avoid      |
-| siteID             | Unique site ID written out fully                                                                       | Lygra, Sogndal, Tromso, and Iskoras?                              |
-| blockID            | Unique block ID, with 3 first letters of siteID and a number (1-4)                                     | Lyg1                                                              |
-| plotID             | Unique plot ID with blockID and habitat                                                                | Lyg1_open, Lyg1_forest                                            |
-| habitat            | Open versus forested habitat                                                                           | open, forest                                                      |
+| site_ID_name       | Unique site name written out fully                                                                     | Lygra, Sogndal, Senja, Kautokeino and Tjotta                      |
+| siteID             | Unique site ID, first 2 letters of site name.                                                          | LY, SO, SE, and KA, TJ                                            |
+| blockID            | Does this exist?                                                                                       | LY1                                                               |
+| habitat            | Open versus forested habitat                                                                           | O, F                                                              |
+| successional_stage | Vegetation representing post-fire successional stages.                                                 | young, intermediate, old                                          |
+| drought            | Drought treatment using rain-out shelters that reduce precipitation by 0, 60 or 90%.                   | ambient, moderate, extreme                                        |
+| plot_nr            | Unique plot number, numeric value from 1-5.                                                            | 1-5                                                               |
+| plotID             | Unique plot ID as a combination of siteID, habitat and plot number                                     | LY_O\_1, LY_F\_1                                                  |
 | species            | Vascular plant taxon names follow for Norway Lid & Lid (Lid J & Lid, 2010). We use full species names. | *Leontopodium nivale*                                             |
 | responses          | Response variables                                                                                     | cover, biomass, Reco                                              |
-|                    |                                                                                                        |                                                                   |
-| drought_experiment |                                                                                                        |                                                                   |
-| drought            | Drought treatment using rain-out shelters that reduce precipitation by 0, 60 or 90%.                   | ambient, moderate, extreme                                        |
-| successional_stage | Vegetation representing post-fire successional stages.                                                 | young, intermediate, old                                          |
-|                    |                                                                                                        |                                                                   |
-| removal_experiment |                                                                                                        |                                                                   |
-| removal_treatment  | Removal treatment                                                                                      | control, removal                                                  |
 
 ### Organize data sets
 

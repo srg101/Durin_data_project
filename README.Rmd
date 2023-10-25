@@ -69,23 +69,24 @@ PlotID contains siteID, block number and treatment: Lyg1_open, Lyg1_forest
 | Files or variable  | Naming convention  | Example  |
 |:---|:---|:---|
 | Project  | Project name  |DURIN |
-| Datasets  | Project_Status_(Experiment)_Response_Year(s).Extension | DURIN_clean_cflux_2023-2025.csv |
+| Datasets  | Project_Status_Response_Year(s).Extension | DURIN_clean_cflux_2023-2025.csv |
 |  |  |  |
 | date  | Date of data collection| yyyy-mm-dd; do not split year, month and day into several columns |
 | year  | Year of data collection| yyyy; allowed if no specific date is available, try to avoid |
-| siteID  | Unique site ID written out fully| Lygra, Sogndal, Tromso, and Iskoras? |
-| blockID  | Unique block ID, with 3 first letters of siteID and a number (1-4) | Lyg1 |
-| plotID  | Unique plot ID with blockID and habitat | Lyg1_open, Lyg1_forest |
-| habitat  | Open versus forested habitat  | open, forest |
+| site_ID_name  | Unique site name written out fully| Lygra, Sogndal, Senja, Kautokeino and Tjotta |
+| siteID  | Unique site ID, first 2 letters of site name. | LY, SO, SE, and KA, TJ |
+| habitat  | Open versus forested habitat  | O, F |
 | species  | Vascular plant taxon names follow for Norway Lid & Lid (Lid J & Lid, 2010). We use full species names. | *Leontopodium nivale* |
+| speciesID  | 2 letter abbreviation of species | VM, VV, CV, EN, BN |
+| plot_nr  | Unique plot number, numeric value from 1-5. | 1-5 |
+| plotID  | Unique plot ID as a combination of siteID, habitat, speciesID and plot number | LY_O_VV_1, LY_F_VM_1 |
 | responses  | Response variables | cover, biomass, Reco |
 |  |  |  |
-| drought_experiment  |  |  |
-| drought | Drought treatment using rain-out shelters that reduce precipitation by 0, 60 or 90%.  | ambient, moderate, extreme |
-| successional_stage  | Vegetation representing post-fire successional stages. | young, intermediate, old |
-|  |  |  |
-| removal_experiment  |  |  |
-| removal_treatment  | Removal treatment | control, removal |
+| Drought experiment |  |  |
+| site  | Site name | LYG, TJO? |
+| successional_stage  | Vegetation representing post-fire successional stages. | 1, 2, 3 |
+| drought | Drought treatment using rain-out shelters that reduce precipitation by 0, 60 or 90%. 1 = ambient, 2 = moderate, 3 = extreme | 1-3 |
+| plotID | Combination of successional stage and drought.  | 1.2, 1.3 |
 
 
 ### Organize data sets
@@ -94,7 +95,6 @@ Sort the dataset so that the important variable come first, preferable use this 
 
 - Date/year
 - siteID
-- blockID
 - plotID
 - habitat
 - treatment
