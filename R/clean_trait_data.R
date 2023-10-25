@@ -1,3 +1,28 @@
+# Fetch the data -----
+
+library(dataDownloader)
+
+## from OSF DURIN ----
+## 2023.10.25 HRD hasn't checked that this works because of an authentication key issue
+
+# Download leaf scan data
+get_file(node = "f4v9t",
+         file = "2023.09.27_LeafScanData_Raw.csv",
+         path = "raw_data",
+         remote_path = "Vegetation/raw_data/Leaf scans")
+
+# Download dry mass data
+get_file(node = "f4v9t",
+         file = "2023.10.17_DryMassChecks.csv",
+         path = "raw_data",
+         remote_path = "Vegetation/raw_data/Trait data")
+
+# Download leaf scan data
+get_file(node = "f4v9t",
+         file = "2023.10.17_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
+         path = "raw_data",
+         remote_path = "Vegetation/raw_data/Trait data")
+
 # Manually clean errors from leaf area scanning datasheet ----
 durin.area -> read.csv("output/2023.09.27_LeafScanData_Raw.csv") |>
   # Rename columns to match main dataset
