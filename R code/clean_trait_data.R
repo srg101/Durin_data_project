@@ -1,5 +1,5 @@
 # Manually clean errors from leaf area scanning datasheet ----
-durin.area = read.csv("output/2023.09.27_LeafScanData_Raw.csv") |>
+durin.area -> read.csv("output/2023.09.27_LeafScanData_Raw.csv") |>
   # Rename columns to match main dataset
   rename(envelope_ID = ID, bulk_nr_leaves_scanned = n) |>
   # Choose edited and found over original
@@ -34,7 +34,7 @@ durin.area = read.csv("output/2023.09.27_LeafScanData_Raw.csv") |>
   select(-c(cutting, X))
 
 # Manually clean errors from dry mass datasheet ----
-durin.drymass = read.csv("raw_data/2023.10.17_DryMassChecks.csv", na.strings=c("","NA")) |>
+durin.drymass -> read.csv("raw_data/2023.10.17_DryMassChecks.csv", na.strings=c("","NA")) |>
   # Drop unused columns
   select(-c(X, order.entered)) |>
   # Remove example and non-data
@@ -67,7 +67,7 @@ durin.drymass = read.csv("raw_data/2023.10.17_DryMassChecks.csv", na.strings=c("
   filter(is.na(flag_DryMass))
 
 # Manually clean errors from main datasheet ----
-durin = read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
+durin -> read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
                  na.strings=c("","NA")) |>
   # Correct Senja
   mutate(siteID = str_replace(siteID, "Senje", "Senja")) |>
