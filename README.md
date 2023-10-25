@@ -18,7 +18,7 @@ available after the end of the project on [OSF](https://osf.io/f4v9t/).
 For now the data is only available to the project partners.
 
 All R code for the cleaning the raw data is available on the [Durin
-GitHub](https://github.com/Durin-project). Particularly, look for the `clean_trait_data.R` script if you just want to clean the raw data. If you want to look for errors in the data, use the `how to clean trait data.R` script.
+GitHub](https://github.com/Durin-project). Particularly, look for the `clean_trait_data.R` script if you just want to clean the raw data. If you want to look for errors in the data, use the `check_traits > how to clean trait data.R` script.
 
 The data documentation, including a draft for the data paper is
 available
