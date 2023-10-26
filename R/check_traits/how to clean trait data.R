@@ -8,13 +8,13 @@ library(tidylog)
 # Useful custom functions ----
 ## Look up an individual envelope ID number to see its info ----
 # Modify the select() to change which data are displayed
-check -> function(barcode) {
-  data -> durin |>
+check <- function(barcode) {
+  data <- durin |>
     select(envelope_ID, siteID,
            DURIN_plot, ageClass, DroughtTrt, DroughNet_plotID,
            plotNR, habitat,
-           species, plant_nr, leaf_nr, leaf_age,leaf_area, calluna_shoot_type,
-           leaf_nr, plant_height, wet_mass_g, dry_mass_g,
+           species, plant_nr, leaf_nr, leaf_age, calluna_shoot_type,
+           leaf_nr, plant_height, wet_mass_g,
            leaf_thickness_1_mm, leaf_thickness_2_mm, leaf_thickness_3_mm) |>
     filter(envelope_ID == barcode)
   data
@@ -22,14 +22,14 @@ check -> function(barcode) {
 
 # Metadata: Check leaves are correctly labelled ----
 ## Young/old ----
-error.oldVM -> durin |>
+error.oldVM <- durin |>
   # Filter to young-only plants
   filter(species %in% c("Calluna vulgaris", "Vaccinium myrtillus")) |>
   # Filter to mislabelled leaf ages
   filter(leaf_age == "old")
 
 ## Find duplicate barcodes ----
-error.duplicates -> durin |>
+error.duplicates <- durin |>
   # We don't care about exact duplicates so distinct() merges those
   distinct() |>
   # Then this filters to only duplicates
@@ -38,7 +38,7 @@ error.duplicates -> durin |>
 
 ## DURIN plot info ----
 ### Does the envelope site match the plot site? ----
-error.durin.site -> durin |>
+error.durin.site <- durin |>
   #Filter to just DURIN
   drop_na(DURIN_plot) |>
   # Separate out the plot ID for identifying species
@@ -58,7 +58,7 @@ error.durin.site -> durin |>
   relocate(c(site.code, site.abbrv), .after = envelope_ID)
 
 ### Does the envelope habitat match the DURIN plot habitat? ----
-error.durin.habitat -> durin |>
+error.durin.habitat <- durin |>
   #Filter to just DURIN
   drop_na(DURIN_plot) |>
   # Separate out the plot ID for identifying species
@@ -76,7 +76,7 @@ error.durin.habitat -> durin |>
 
 
 ### Does the PlotNR field match the DURIN plot number? ----
-error.durin.plotnr -> durin |>
+error.durin.plotnr <- durin |>
   #Filter to just DURIN
   drop_na(DURIN_plot) |>
   # Separate out the plot ID for identifying species
@@ -87,7 +87,7 @@ error.durin.plotnr -> durin |>
   relocate(c(plotNR, rep.abbrv, DURIN_plot), .after = envelope_ID)
 
 ### Does the envelope species match the DURIN plot species? ----
-error.durin.spp -> durin |>
+error.durin.spp <- durin |>
   #Filter to just DURIN
   drop_na(DURIN_plot) |>
   # Separate out the plot ID for identifying species
@@ -108,7 +108,7 @@ error.durin.spp -> durin |>
 ### How many plants are in each plot? ----
 # RECOMMENDED you run this AFTER updating all the other fields listed above
 # Calculate the maximum number of plants in each plot
-durin.max.plant_nr -> durin |>
+durin.max.plant_nr <- durin |>
   # Select the columns needed
   select(DURIN_plot, DroughNet_plotID, species, plant_nr) |>
   # Remove duplicate data
@@ -118,7 +118,7 @@ durin.max.plant_nr -> durin |>
   slice_max(plant_nr) |>
   rename(max.plant.n = plant_nr)
 
-error.durin.plots -> durin |>
+error.durin.plots <- durin |>
   # Bring to just the level of unique plants
   select(siteID, DURIN_plot, plant_nr, plant_height) |>
   drop_na(DURIN_plot) |>
@@ -139,7 +139,7 @@ error.durin.plots -> durin |>
 ## Replicates ----
 ### Plant number -----
 # Which envelopes are missing plant number?
-error.durin.plantnr.missing -> durin |>
+error.durin.plantnr.missing <- durin |>
   # Filter to species with young and old leaves
   filter(species %in% c("Vaccinium vitis-idaea", "Empetrum nigrum")) |>
   # Filter out known issues (wrong species)
@@ -148,13 +148,13 @@ error.durin.plantnr.missing -> durin |>
   # Filter to NA values
   filter(is.na(plant_nr))
 
-nr.missing.list -> as.list(error.durin.plantnr.missing$envelope_ID)
+nr.missing.list <- as.list(error.durin.plantnr.missing$envelope_ID)
 
 # Which plots are missing plants?
 ## SEE CODE ABOVE as this is done separately for DURIN and DroughtNet plots
 
 ### Leaf number ----
-check.plant -> function(plot, plantnr) {
+check.plant <- function(plot, plantnr) {
   data = durin |>
     select(envelope_ID, siteID,
            DURIN_plot,
@@ -167,12 +167,12 @@ check.plant -> function(plot, plantnr) {
 }
 
 # Which envelopes are missing leaf numbers?
-error.durin.leafnr.missing -> durin |>
+error.durin.leafnr.missing <- durin |>
   # Filter to NA values
   filter(is.na(leaf_nr))
 
 # Which plants are missing leaves (or have extras)?
-error.durin.leaves -> durin %>%
+error.durin.leaves <- durin %>%
   # Select just the relevant data
   drop_na(DURIN_plot) |>
   filter(project == "Field - Traits") |>
@@ -182,17 +182,17 @@ error.durin.leaves -> durin %>%
 
 ### Leaf age ----
 # Which envelopes are missing leaf ages?
-error.durin.age.missing -> durin |>
+error.durin.age.missing <- durin |>
   # Filter to species with young and old leaves
   filter(species %in% c("Vaccinium vitis-idaea", "Empetrum nigrum")) |>
   # Filter to NA values
   filter(is.na(leaf_age))
 
-age.missing.list -> as.list(error.durin.age.missing$envelope_ID)
+age.missing.list <- as.list(error.durin.age.missing$envelope_ID)
 
 # Data: Check that leaves are correctly measured ----
 ## Do plant heights match between fieldsheet and envelope? ----
-error.durin.height.W.fielddata -> durin |>
+error.durin.height.W.fielddata <- durin |>
   # Rename column
   rename(plant_height.entered = plant_height) |>
   # Join in field sheet data
@@ -210,7 +210,7 @@ error.durin.height.W.fielddata -> durin |>
 write.csv(error.durin.height.Wfielddata, "output/error.durin.height.withFieldData.csv")
 
 ## Do plant heights match between individual plants? ----
-error.durin.height -> durin |>
+error.durin.height <- durin |>
   # Filter out Phys team
   filter(project == "Field - Traits") |>
   # make list of plants with more than one height
@@ -252,7 +252,7 @@ ggplot(durin |> mutate(dry_mass_g = as.numeric(dry_mass_g))|>
 ggsave()
 
 # Identify the outliers
-error.massratio -> durin |>
+error.massratio <- durin |>
   # Make dry mass numeric
   mutate(dry_mass_g = as.numeric(dry_mass_g)) |>
   # Make ratio of dry to wet mass
@@ -300,7 +300,7 @@ ggplot(durin,
 ggsave("visualizations/2023.10.18_SLAxAreaErrors_scaledtobulkleafnr.png")
 
 # From these visuals, we can estimate reasonable values
-error.SLAxArea -> error.sla |>
+error.SLAxArea <- error.sla |>
   # Flag possible errors
   mutate(flag_SLA = case_when(
     species == "Calluna vulgaris" & (SLA < 25 | SLA > 150) ~ "CV SLA error",
@@ -325,12 +325,12 @@ write.csv(error.SLAxArea, "output/2023.10.12_SLAxAreaErrors.csv")
 ## Are all values sensible in relation to the mean values? ----
 ### Calculate means
 library(rstatix)
-durin.means -> durin |>
+durin.means <- durin |>
   select(plant_height:leaf_thickness_3_mm) |>
   get_summary_stats(type = "mean_ci")
 
 ### Thickness errors ----
-error.durin.thickness -> durin |>
+error.durin.thickness <- durin |>
   # Values pulled from durin.means object
   filter(leaf_thickness_1_mm > 0.290*10 |
            leaf_thickness_2_mm > 0.412*10 |
@@ -341,14 +341,14 @@ error.durin.thickness -> durin |>
   relocate(c(leaf_thickness_1_mm, leaf_thickness_2_mm, leaf_thickness_3_mm), .after = envelope_ID)
 
 ### Weight errors ----
-error.durin.weight -> durin |>
+error.durin.weight <- durin |>
   # Values pulled from durin.means object
   filter(wet_mass_g > 0.021 *10 |
            wet_mass_g < 0.021/10) |>
   relocate(wet_mass_g, .after = envelope_ID)
 
 ### Height errors ----
-error.durin.height -> durin |>
+error.durin.height <- durin |>
   # Values pulled from durin.means object
   filter(plant_height > 19.487 * 5 |
            plant_height < 19.487/10) |>
@@ -357,7 +357,7 @@ error.durin.height -> durin |>
 # Dry mass error checks ----
 ## Which barcodes are duplicates? ----
 # Check for duplicates with different dry_mass_g entries
-error.drymass.duplicate -> durin |>
+error.drymass.duplicate <- durin |>
   left_join(durin.drymass) |>
   # We don't care about exact duplicates so distinct() merges those
   select(envelope_ID, dry_mass_g) |>
@@ -371,20 +371,20 @@ error.drymass.duplicate -> durin |>
 # write.csv(error.drymass.duplicate, "output/2023.10.06_errorcheck_drymass.csv")
 
 ## Which barcodes are in the main datasheet but don't have dry mass? ----
-error.drymass.missing -> durin |>
+error.drymass.missing <- durin |>
   # Filter to missing ones
   filter(is.na(dry_mass_g_original)) |>
   # Mark as missing
   mutate(flag = "missing dry_mass_g")
 
 # Double-check these aren't in the Lygra discarded barcodes
-error.drymass.missing.double -> error.drymass.missing |>
+error.drymass.missing.double <- error.drymass.missing |>
   right_join(read.csv("raw_data/Lygra barcodes to discard - Sheet2.csv"))
 
 write.csv(error.drymass.missing, "output/2023.10.17_errorcheck_drymass_missing.csv")
 
 ## Which barcodes are in the DryMassCheck sheet but not the main spreadsheet? ----
-error.drymass.extra -> durin |>
+error.drymass.extra <- durin |>
   # Bring together both the leaf barcodes and cutout barcodes
   # This is weird but probably works
   # Select the smaller list of barcodes
@@ -408,7 +408,7 @@ error.drymass.extra -> durin |>
   mutate(flag = "extra (in DryMassCheck but not main datasheet")
 
 ## Double-check it's working with the cutouts
-error.drymass.double -> durin |>
+error.drymass.double <- durin |>
   select(cutout_barcode) |>
   rename(envelope_ID = cutout_barcode) |>
   # Use a filtering join
@@ -417,7 +417,7 @@ error.drymass.double -> durin |>
 # write.csv(error.drymass.extra, "output/2023.10.10_errorcheck_drymass_extra.csv")
 
 ## Make large object with all the different DryMassCheck errors ----
-error.drymass -> error.drymass.duplicate |>
+error.drymass <- error.drymass.duplicate |>
   bind_rows(error.drymass.extra, error.drymass.missing) |>
   # This object is from `barcode positions.R`
   left_join(barcodes) |>
@@ -438,7 +438,7 @@ error.drymass -> error.drymass.duplicate |>
 # NOTE that Round 3 checks have NOT been completed as of 2023.09.11
 
 # Compile check object
-envelope.checks -> read.csv("raw_data/DURIN Plant Functional Traits - 2023.07.31_Rd1_MeasurementChecks.csv") |>
+envelope.checks <- read.csv("raw_data/DURIN Plant Functional Traits - 2023.07.31_Rd1_MeasurementChecks.csv") |>
   mutate(round = "1") |>
   bind_rows(read.csv("raw_data/DURIN Plant Functional Traits - Rd 2 measurement checks.csv")) |>
   mutate(round = replace_na(round, "2")) |>
@@ -448,7 +448,7 @@ envelope.checks -> read.csv("raw_data/DURIN Plant Functional Traits - 2023.07.31
   relocate(envelope_ID, Variable.with.error, Supporting.Text.Comment, Fix)
 
 # Function to look up fixes
-check.fix -> function(barcode){
+check.fix <- function(barcode){
   data = envelope.checks |>
     filter(envelope_ID == barcode)
   data
