@@ -24,7 +24,7 @@ get_file(node = "f4v9t",
          remote_path = "Vegetation/raw_data/Trait data")
 
 # Manually clean errors from leaf area scanning datasheet ----
-durin.area <- read_csv("raw_data/2023.09.27_LeafScanData_Raw.csv") |>
+durin.area <- read.csv("raw_data/2023.09.27_LeafScanData_Raw.csv") |>
   # Rename columns to match main dataset
   rename(envelope_ID = ID, bulk_nr_leaves_scanned = n) |>
   # Choose edited and found over original
@@ -61,7 +61,7 @@ durin.area <- read_csv("raw_data/2023.09.27_LeafScanData_Raw.csv") |>
   distinct()
 
 # Manually clean errors from dry mass datasheet ----
-durin.drymass <- read_csv("raw_data/2023.10.17_DryMassChecks.csv", na.strings=c("","NA")) |>
+durin.drymass <- read.csv("raw_data/2023.10.17_DryMassChecks.csv", na.strings=c("","NA")) |>
   # Drop unused columns
   select(-c(X, order.entered)) |>
   # Remove example and non-data
@@ -96,7 +96,7 @@ durin.drymass <- read_csv("raw_data/2023.10.17_DryMassChecks.csv", na.strings=c(
   distinct()
 
 # Manually clean errors from main datasheet ----
-durin <- read_csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
+durin <- read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sogndal Tjøtta Senja Kautokeino_Data only.csv",
                  na.strings=c("","NA")) |>
   # Combine any exact duplicates
   distinct() |>
