@@ -1,0 +1,507 @@
+---
+title: "DURIN Trait Paper"
+author: "Sonya R. Geange"
+output: html_notebook
+---
+
+# Introduction
+
+
+
+```{r}
+#### Load packages ----
+library(tidyverse)
+# remotes::install_github("Between-the-Fjords/dataDownloader")
+library(dataDownloader)
+
+# Define custom functions
+`%notin%` <- Negate(`%in%`)
+
+#### Load dataset from OSF ----
+## 2023.10.25 HRD hasn't checked that this works because of an authentication key issue
+## 2023.10.31 SRG also has the same authentication issue - downloaded manually for now.
+
+# Download current cleaned dataset
+# Version 21.10.23
+get_file(node = "f4v9t",
+         file = "DURIN_clean.csv",
+         path = "raw_data",
+         remote_path = "Vegetation/clean_data")
+
+data_DURIN_raw <- read.csv("output/DURIN_clean.csv", na.strings = c("", "NA"))
+```
+
+
+```{r}
+# Create subsetted wide dataset for DURIN plots only and relevant attributes
+data_DURIN <- data_DURIN_raw %>%
+  filter(project == "Field - Traits") %>% # Only select from trait not physiology work
+  drop_na(DURIN_plot) %>%  # Ignore the DroughtNet Treatments for now
+  # Select key columns only - first by rearranging dataset so all traits together
+  relocate(c(leaf_area, SLA, dry_mass_g, wet_mass_g, LDMC, leaf_thickness_1_mm:leaf_thickness_3_mm), .after = leaf_age) %>% 
+  select(envelope_ID, siteID, habitat, plotNR, DURIN_plot, species, plant_nr, leaf_nr, calluna_shoot_type, leaf_age:leaf_thickness_3_mm, plant_height)
+
+
+#### Data Organization ####
+
+
+# Add concatenated name for leaf ID
+data_DURIN$uniqueleafID <- paste0(data_DURIN$DURIN_plot, "_",data_DURIN$plant_nr,"_", data_DURIN$leaf_age,"_", data_DURIN$calluna_shoot_type, "_", data_DURIN$leaf_nr)
+
+# Alterantive version using individual components for DURIN_plot
+# Add species without white space column
+data_DURIN$species_ws <- gsub(" ", "_", data_DURIN$species)
+data_DURIN$uniqueleafID_V2 <- paste0(data_DURIN$siteID,"_",data_DURIN$habitat,"_", data_DURIN$species_ws, "_", data_DURIN$plotNR, "_",data_DURIN$plant_nr,"_", data_DURIN$leaf_age,"_", data_DURIN$calluna_shoot_type, "_", data_DURIN$leaf_nr)
+
+#TODO: Check duplicates
+
+# Need balanced data - so check out how many individual there are per sites/treatment etc
+individual_count <- data_DURIN %>% 
+  group_by(DURIN_plot, plant_nr, leaf_age, calluna_shoot_type,leaf_nr) %>% 
+  summarize(n = n())
+# Check using concatenated code alternative
+individual_count_v2 <- data_DURIN %>% 
+  group_by(uniqueleafID) %>% 
+  summarize(n = n())
+
+# Still seems to be quite a few situations where we have multiple leaves/enevelopes for the same site, habitat, plot, plant, leaf age, shoot type, leaf number.
+# Highlight those with more than 2 records
+individual_issues <- data_DURIN %>% 
+  group_by(uniqueleafID) %>% 
+  summarize(n = n()) %>% 
+  filter(n >1)
+
+# Create mini-dataset for just the ones with these issues
+issue_IDs <- unique(individual_issues$uniqueleafID)
+data_DURIN_individual_issues <- data_DURIN %>% 
+  filter(uniqueleafID %in% issue_IDs)
+write.csv(data_DURIN_individual_issues, "output/data_DURIN_individual_issues.csv")
+  
+# Remove these problematic ones for now, COME BACK TO LATER ON!
+data_DURIN_clean <- data_DURIN %>% 
+  filter(uniqueleafID %notin% issue_IDs)
+
+
+# Long format version of dataset
+data_DURIN_long <- data_DURIN_clean %>% 
+  pivot_longer(cols = leaf_area:plant_height, names_to = "trait", values_to = "value")
+
+# Note, we have up to three meausres for leaf thickness, and only one measure of each other trait
+data_DURIN_long <- data_DURIN_long %>% 
+  mutate(trait = replace(trait,
+                         trait == "leaf_thickness_1_mm" | trait == "leaf_thickness_2_mm" | trait == "leaf_thickness_3_mm",
+                         "leaf_thickness"))
+
+# Reorder the levels of our factors, so no longer just alphabetical
+data_DURIN_long <- data_DURIN_long %>% 
+  mutate(leaf_age = factor(leaf_age, levels = c("young", "old"),
+                    labels = c("Young", "Old"))) %>% 
+           mutate(trait = factor(trait, levels = c("leaf_area", "SLA", "LDMC", "dry_mass_g",
+                                                   "leaf_thickness","wet_mass_g", "plant_height"),
+                 labels = c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)", "Dry mass (g)",
+                            "Leaf thickness (mm)", "Wet mass (g)", "Plant Height (cm)")))
+
+# Drop rows with NA values for traits
+data_DURIN_long <- data_DURIN_long %>% 
+  drop_na(value)
+
+
+##### Add some new columns to describe the experimental set-up ----
+# Lygra and Senja as our coastal sites, and Sogndal and Kautokeino as our inland sites
+# Lygra and Songdal as our southern sites, and Kautokeino and Senja as our northern sites
+data_DURIN_long <- data_DURIN_long %>% 
+  mutate(north_south = factor(siteID, levels = c("Lygra", "Senja", "Sogndal", "Kautokeino"),
+                              labels = c("North", "North", "South", "South"))) %>% 
+    mutate(coast_inland = factor(siteID, levels = c("Lygra", "Senja", "Sogndal", "Kautokeino"),
+                              labels = c("Coast", "Coast", "Inland", "Inland")))
+
+
+# Visualize ----
+library(ggh4x)
+library(viridis)
+library(patchwork)
+
+## Plot  traits together, ignoring site for now ----
+(ggplot(data_DURIN_long %>% 
+         filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
+                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")), 
+         # drop_na(leaf_age),
+       aes(x = habitat, y = value, fill = species, color = species)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_fill_viridis(discrete=T) +
+  scale_color_viridis(discrete=T) +
+  # scale_y_log10() +
+  facet_nested(species ~ trait, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "Leaf year") +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+
+## Plot  traits together, with site as a grouping factor - Version 1 ----
+(ggplot(data_DURIN_long %>% 
+         filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
+                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")), 
+         # drop_na(leaf_age),
+       aes(x = habitat, y = value, fill = siteID, color = siteID)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_fill_viridis(discrete=T) +
+  scale_color_viridis(discrete=T) +
+  # scale_y_log10() +
+  facet_nested(species ~ trait, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "Leaf year") +
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+# Plot  traits together, with site as a grouping factor - Version 2 ----
+(ggplot(data_DURIN_long %>% 
+         filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
+                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")), 
+         # drop_na(leaf_age),
+       aes(x = siteID, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_fill_viridis(discrete=T) +
+  scale_color_viridis(discrete=T) +
+  # scale_y_log10() +
+  facet_nested(species ~ trait, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "DURIN Site", y = "Trait Value", fill = "Habitat", color = NA) +
+  theme_bw() +
+  #coord_flip() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+
+# Plot  traits together, with site and leaf age as a grouping factors - Version 1 ----
+(ggplot(data_DURIN_long %>% 
+         filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
+                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(aes(), outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_fill_viridis(discrete=T) +
+  scale_color_viridis(discrete=T) +
+  # scale_y_log10() +
+  facet_nested(siteID + leaf_age ~ trait, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "DURIN Site", y = "Trait Value", fill = "Habitat", color = NA) +
+  theme_bw() +
+  #coord_flip() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+```
+
+# Variance Partitioning
+
+```{r}
+library(tidyverse)
+library(lme4)
+library(reshape2)
+library(cowplot) #to arrange multiple plots in a figure
+library(gcookbook)
+library(readr)
+# CRAN version
+# devtools::install_github("johannesbjork/LaCroixColoR")
+library(LaCroixColoR)
+library(ggpubr)
+
+
+
+
+
+# Task: Perform variance analysis of traits
+
+# Sets a theme for the plots
+blank_theme <- theme(panel.grid.major = element_blank(), #removes major axis grid lines
+                     panel.grid.minor = element_blank(), #removes minor axis grid lines
+                     panel.background = element_blank(), #removes the default grey background
+                     legend.key = element_blank(), #removes background behind legend keys
+                     axis.line = element_line(colour = "black"), #makes axis lines black
+                     text = element_text (size = 15), #sets all text size to 20 
+                     axis.text = element_text(size = 12)) #sets axis text to size 15  
+
+
+# Use long dataset
+#plotting a histogram for each trait to determine if the data is skewed
+# TODO: Some outliers to fix
+
+(data_DURIN_long %>% 
+  ggplot(aes(x = value, fill = siteID)) +
+  geom_density(alpha = 0.2) +
+  facet_nested(species ~ trait, scales = "free", independent = "all") +
+  labs(title = "Trait Distribution"))
+
+#log transforming traits because of skew
+data_DURIN_long_log <- data_DURIN_long %>% 
+  mutate(value = log(value))
+
+#plotting log transformed traits to confirm skew is gone
+(data_DURIN_long_log %>% 
+  ggplot(aes(x = value, fill = siteID)) +
+  geom_density(alpha = 0.2) +
+  facet_nested(species ~ trait, scales = "free", independent = "all") +
+  labs(title = "Trait Distribution Log (natural)"))
+
+#### Model Structure 2 - species/siteID/habitat/plant_nr ####
+# Here, we have leaves as the final level along with unexplained variation.
+
+
+output2 <- data.frame(NULL)
+for(i in unique(data_DURIN_long_log$trait)){
+  #This code all comes from Julie Messier's web site
+  mod2<-lmer(value~1+(1|species/siteID/habitat/plant_nr), 
+            data=data_DURIN_long_log %>% filter(trait == i), 
+            na.action=na.omit)
+  variances2<-c(unlist(lapply(VarCorr(mod2),diag)), 
+               attr(VarCorr(mod2),"sc")^2) #get variances
+  
+  var.comp2<-variances2/sum(variances2)
+  
+  var.comp2<-as.data.frame(var.comp2) #creates a dataframe from the values
+  var.comp2<-cbind(rownames(var.comp2),data.frame(var.comp2,row.names=NULL)) #changes row names into a column
+  var.comp2<-melt(var.comp2,value.name="value") #makes var.comp into a variable
+  names(var.comp2)[1]<-"Scale" #changes the first column name to "scale"
+  
+  var.comp2$value<-var.comp2$value *100 #changes values into % 
+  
+  var.comp2<- var.comp2 %>%
+    mutate(Scale = plyr::mapvalues(Scale, from = c(""), to = c("Within Individual and Unexplained"))) %>% 
+    mutate(Scale = factor(Scale, levels = c("Within Individual and Unexplained","plant_nr:(habitat:(siteID:species)).(Intercept)","habitat:(siteID:species).(Intercept)","siteID:species.(Intercept)","species.(Intercept)"))) %>% 
+    # group_by(variable)%>%
+    arrange(variable, Scale)%>%
+    mutate(labypos=100-(cumsum(value)-0.5*value)) %>%
+    #subset(value>1) %>% #this line removes variance partitioning less than 1% so that there are no zero labels
+    mutate(trait = i)
+  
+  output2 <- bind_rows(output2, var.comp2)
+} 
+
+# We don't want plant height, as it's only recorded to individual level not within individual level
+# Remove height rows
+DURIN_VarPart_Leaves <- output2 %>% 
+  filter(trait != "Plant Height (cm)")
+
+
+
+#Colour palette for graph: https://paletton.com/#uid=54n140kjJo3hfJliyuOl7gxlT9k
+#Colour palette is in low saturation 
+#Variance Partitioning Plot 2 
+VP_legend_title <- "Leaf Traits: Ecological Scales"
+VP_Plot2<-ggplot(DURIN_VarPart_Leaves, 
+                 aes(x=trait, y=value))+
+  geom_col(aes(fill=Scale))+
+  geom_text(aes(y=labypos, label=round(value,digits = 1)),colour="white", size = 5)+
+  scale_fill_manual (VP_legend_title, values = c("#86b4ce","#4F93B8","#306489","#222B4C","#AD8CAE"),
+                    #values = c("#77293e","#ae435f","#f27092","#543a83","#37245a"),
+                     labels = c("Within individual + Unexplained",
+                                "Between individuals within habitat/site/species",
+                                "Between habitats within sites within species",
+                                "Between sites within species",
+                                "Between species"))+
+  ylab("Proportion of Variance (%)")+
+  xlab("Log (natural) Transformed Traits")+
+  blank_theme+
+  coord_flip() +
+  labs(fill = "Leaf Traits: Ecological Scale")+
+  scale_y_continuous(expand=c(0,0),limits=c(0,100.1))+#this forces the graph to actually start at 0% and end at 100%
+  scale_x_discrete(limits = c("Leaf area (cm^2)", "Dry mass (g)", "SLA (cm^2/g)",
+                              "LDMC (mg/g)", "Wet mass (g)")) +
+  theme(axis.text.x = element_text(angle = 300, hjust = 0))
+VP_Plot2
+
+
+# Model without within individual variation
+output3 <- data.frame(NULL)
+for(i in unique(data_DURIN_long_log$trait)){
+  #This code all comes from Julie Messier's web site
+  mod3<-lmer(value~1+(1|species/siteID/habitat), 
+            data=data_DURIN_long_log %>% filter(trait == i), 
+            na.action=na.omit)
+  variances3<-c(unlist(lapply(VarCorr(mod3),diag)), 
+               attr(VarCorr(mod3),"sc")^2) #get variances
+  
+  var.comp3<-variances3/sum(variances3)
+  
+  var.comp3<-as.data.frame(var.comp3) #creates a dataframe from the values
+  var.comp3<-cbind(rownames(var.comp3),data.frame(var.comp3,row.names=NULL)) #changes row names into a column
+  var.comp3<-melt(var.comp3,value.name="value") #makes var.comp into a variable
+  names(var.comp3)[1]<-"Scale" #changes the first column name to "scale"
+  
+  var.comp3$value<-var.comp3$value *100 #changes values into % 
+  
+  var.comp3<- var.comp3 %>%
+    mutate(Scale = plyr::mapvalues(Scale, from = c(""), to = c("Between Individuals and Unexplained"))) %>% 
+    mutate(Scale = factor(Scale, levels = c("Between Individuals and Unexplained","habitat:(siteID:species).(Intercept)","siteID:species.(Intercept)","species.(Intercept)"))) %>% 
+    # group_by(variable)%>%
+    arrange(variable, Scale)%>%
+    mutate(labypos=100-(cumsum(value)-0.5*value)) %>%
+    #subset(value>1) %>% #this line removes variance partitioning less than 1% so that there are no zero labels
+    mutate(trait = i)
+  
+  output3 <- bind_rows(output3, var.comp3)
+} 
+
+
+
+#Colour palette for graph: https://paletton.com/#uid=54n140kjJo3hfJliyuOl7gxlT9k
+#Colour palette is in low saturation 
+#Variance Partitioning Plot 3 
+
+# We don't want plant height, as it's only recorded to individual level not within individual level
+# Remove height rows
+DURIN_VarPart_Height <- output3 %>% 
+  filter(trait == "Plant Height (cm)")
+
+
+VP_legend_title <- "Plant Height: Ecological Scales"
+VP_Plot3<-ggplot(DURIN_VarPart_Height, 
+                 aes(x=trait, y=value))+
+  geom_col(aes(fill=Scale))+
+  geom_text(aes(y=labypos, label=round(value,digits = 1)),colour="white", size = 5)+
+  scale_fill_manual (VP_legend_title, values = c("#86b4ce","#306489","#222B4C","#AD8CAE"),
+                     labels = c("Between individuals + Unexplained",
+                                "Between habitats within sites within species",
+                                "Between sites within species",
+                                "Between species"))+
+  ylab("Proportion of Variance (%)")+
+  xlab("Log (natural) Transformed Traits")+
+  blank_theme+
+  coord_flip() +
+  labs(fill = "Plant Height: Ecological Scale")+
+  scale_y_continuous(expand=c(0,0),limits=c(0,100.1))+#this forces the graph to actually start at 0% and end at 100%
+  scale_x_discrete(limits = c("Plant Height (cm)")) +
+  theme(axis.text.x = element_text(angle = 300, hjust = 0))
+VP_Plot3
+
+
+# Plot side by side
+(VP_DURIN_Combined <- ggarrange(VP_Plot2
+                     , VP_Plot3 + rremove("ylab"),
+                     ncol = 1, nrow = 2,
+          legend = "bottom", labels = c("A", "B"),
+          common.legend = FALSE))
+
+#combining plots
+
+VP_Plot2.legend<- get_legend(VP_Plot2)  #gets the legend from each plot
+VP_Plot3.legend<- get_legend(VP_Plot3)
+
+temp.plots<- plot_grid(VP_Plot2 + theme(legend.position = "none"),
+                       VP_Plot3 + theme(legend.position = "none") + xlab(NULL),
+                       ncol=1, 
+                       align = 'hv',
+                       rel_heights = c(1,0.3),
+                       rel_widths = c(1,1))
+
+temp.legend<-plot_grid(VP_Plot2.legend,
+                       VP_Plot3.legend,
+                       align = 'hv',
+                       rel_heights = c(0.5,1),
+                       nrow = 2)
+plot_grid(temp.plots,
+          temp.legend,
+          rel_widths =  c(1,0.5),
+          ncol = 2)
+
+ggsave ("VP.jpeg",
+        width = 6.5, height=5, units = "in",
+        dpi = 800)
+```
+
+
+
+
+```{r}
+# Experimental to get warming across sites - not yet finished.
+
+# Create empty dataframe for varpart model components
+output2_habitat <- data.frame(NULL)
+
+# Run variance partitioning for each trait in the dataset
+for(i in unique(data_DURIN_long_log$trait)){
+  # This code all comes from Julie Messier's web site
+  # Create a lmer model with crossed random effects structure for habitat
+  mod2_habitat <-lmer(value ~ 1 + (1|species/siteID/plant_nr) + (1|habitat), 
+            data = data_DURIN_long_log %>% filter(trait == i), 
+            na.action=na.omit)
+  # Get variances for each level of the random effects structure
+  variances2_habitat <- c(unlist(lapply(VarCorr(mod2_habitat),diag)), 
+               attr(VarCorr(mod2_habitat),"sc")^2) 
+  
+  # Create as proportions of total variance in the dataset
+  var.comp2_habitat <- variances2_habitat/sum(variances2_habitat)
+  
+  # Populate the empty dataframe with the variance values
+  var.comp2_habitat<-as.data.frame(var.comp2_habitat) 
+  var.comp2_habitat<-cbind(rownames(var.comp2_habitat),data.frame(var.comp2_habitat,row.names=NULL))  
+  # Change row names into a column, i.e. the variance components themselves become a variable
+  var.comp2_habitat<-melt(var.comp2_habitat,value.name="value") 
+  # Rename the first column to "scale", representing the study design
+  names(var.comp2_habitat)[1]<-"Scale" 
+  # Convert values into percentages
+  var.comp2_habitat$value<-var.comp2_habitat$value *100 
+  # Label the variance component scales, based off the model outputs. Change blank to within - unexplained
+  var.comp2_habitat<- var.comp2_habitat %>%
+    mutate(Scale = plyr::mapvalues(Scale, from = c(""), to = c("Within Individuals and Unexplained"))) %>%
+    mutate(Scale = factor(Scale, levels = c("Within Individuals and Unexplained","plant_nr:(siteID:species).(Intercept)","siteID:species.(Intercept)","species.(Intercept)", "habitat.(Intercept)"))) %>% 
+    arrange(variable, Scale)%>%
+    mutate(labypos=100-(cumsum(value)-0.5*value)) %>%
+    # If reuired, this subset removes any variance partitioning scale with values less than 1%
+    mutate(trait = i)
+  # Create the final output file
+  output2_habitat <- bind_rows(output2_habitat, var.comp2_habitat)
+} 
+
+# Filter out plant height, which doesn't have within individual variation
+DURIN_VarPart_Crossed_Leaves <- output2_habitat %>% 
+  filter(trait != "Plant Height (cm)")
+
+
+#Variance Partitioning Plot 2 for Habitat as Crossed factor
+VP_Plot2_habitat_legend_title <- "Leaf Traits: Ecological Scales"
+VP_Plot2_habitat <- ggplot(DURIN_VarPart_Crossed_Leaves, 
+                 aes(x = trait, y = value)) +
+  geom_col(aes(fill=Scale)) +
+  # Label with the variance percentages
+  geom_text(aes(y = labypos, label = round(value,digits = 1)),colour="white", size = 5) +
+  # Manual define colours, trying to seperate interspecific and intraspecific components
+  scale_fill_manual (VP_legend_title, values = c("#5D3640","#8A5462","#C68596","#8977AA","#4F4266"),
+                     # Make variance components labels more intuitive
+                     labels = c("Within individuals + unexplained variance",
+                                "Between individuals",
+                                "Between sites within species",
+                                "Between species",
+                                "Between habitats")) +
+  # Only need the flip when looking to combine the height and leaf trait figures vertically. Else remove
+  coord_flip() +
+  ylab("Proportion of Variance (%)") +
+  xlab("Log (natural) Transformed Traits") +
+  blank_theme + # blank_theme is defined above
+  labs(fill = "Leaf Traits: Ecological Scales") +
+  scale_y_continuous(expand=c(0,0),limits=c(0,100.1)) + # Force limits to be 0 and 100
+  # scale_x_discrete(limits = c("dry_mass_g","leaf_area_cm2", "sla_cm2_g","ldmc", "leaf_thickness_mm")) +
+  # If coord flip not used, then run this theme text adjust to adjust text angle for variable names
+  theme(axis.text.x = element_text(angle = 0, hjust = 0))  # change to 300 for alt coordflip layout
+VP_Plot2_habitat
+
+
+
+
+```
+
+
