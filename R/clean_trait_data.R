@@ -82,6 +82,7 @@ durin.drymass <- read.csv("raw_data/2023.10.17_DryMassChecks.csv", na.strings=c(
     # Correct typos
       envelope_ID == "JVU9850" ~ 0.00181,
       envelope_ID == "FDV2375" ~ 0.00097,
+    envelope_ID == "ACO8442" ~ 0.06142,
     # Replace outliers with NA
       envelope_ID %in% c("BWL8722", "BKI4712", "BWM2473") ~ NA,
       TRUE ~ dry_mass_g
@@ -189,7 +190,9 @@ durin <- read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognd
       envelope_ID == "AZJ4306" ~ "LY_O_VV_5",
       envelope_ID == "EGE6339" ~ "SE_F_VV_2",
       envelope_ID == "BLM2549" ~ "LY_O_VV_1",
-      envelope_ID == "FIV6929" ~ "LY_F_CV_1",
+      envelope_ID %in% c("FIV6929", "JXA5120") ~ "LY_F_CV_1",
+      envelope_ID == "JJE7414" ~ "SO_F_CV_4",
+
       # Moving mislabelled plants (RANDOMLY SELECTED FROM PLOT WITH TOO MANY)
       envelope_ID %in% c("BES9911", "BBO5089", "BBK5291") ~ "LY_O_VV_4",
       # Species corrections
@@ -201,7 +204,8 @@ durin <- read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognd
       envelope_ID %in% c("EXQ8322", "EYR2971", "EYV3590", "EZA6532", "DFW2204", "EYG4750", "EYK4044",
                          "DHD0172","DHH3325", "DFM4890", "AZB3929", "CYR2242", "CZD0880","CLA4537",
                          "CLE7064","ARB1083","ATE1699", "ATI1569", "ATX5549", "AYB7940", "AYP7221",
-                         "AYS6617", "AZE4205", "AZJ4306", "AZM0806", "BZA7321", "DGB6760") ~"Open",
+                         "AYS6617", "AZE4205", "AZJ4306", "AZM0806", "BZA7321", "DGB6760", "JIQ4468",
+                         "FGU3370") ~"Open",
       envelope_ID %in% c("BIL0759", "EVA9626", "BOW7206", "EGE6339", "EVI4590", "DAM1823",
                          "BWU3342", "EUJ5068", "CCH4321") ~ "Forested",
       TRUE ~ habitat
@@ -212,7 +216,7 @@ durin <- read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognd
       envelope_ID %in% c("BFY4922", "ATI1569", "ATX5549", "EGE6339", "AYP7221", "AZM0806") ~ 2,
       envelope_ID %in% c("ATE1699", "AYS6617") ~ 3,
       envelope_ID %in% c("BES9911", "BBO5089", "BBK5291", "ARB1083") ~ 4,
-      envelope_ID == "AZJ4306" ~ 5,
+      envelope_ID %in% c("AZJ4306", "JJA0346") ~ 5,
       TRUE ~ plotNR
     ),
     # Correct leaf numbers
@@ -244,17 +248,24 @@ durin <- read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognd
       envelope_ID == "APK0446" ~ 0.311,
       envelope_ID == "ASM6249" ~ 0.114,
       envelope_ID == "AYX2273" ~ 0.248,
+      envelope_ID == "JWU6955" ~ 0.261,
+      # Change to NA for nonsensical values
+      envelope_ID == "DSD6681" ~ NA,
       TRUE ~ leaf_thickness_1_mm
     ),
     leaf_thickness_2_mm = case_when(
       envelope_ID =="BPF4529"~0.221,
       envelope_ID == "ASM6249" ~ 0.114,
       envelope_ID == "EKS3555" ~ 0.258,
+      envelope_ID == "DYR1545" ~ 0.321,
+      envelope_ID == "IMQ6427" ~ 0.381,
+      envelope_ID == "FGS3477" ~ 0.472,
       TRUE ~ leaf_thickness_2_mm
     ),
     leaf_thickness_3_mm = case_when(
       envelope_ID == "ABZ7857" ~ 0.114,
       envelope_ID == "ADW3051" ~ 0.247,
+      envelope_ID == "AUX7373" ~ 0.119,
       TRUE ~ leaf_thickness_3_mm
     ),
     # Correct plant heights
@@ -278,6 +289,7 @@ durin <- read.csv("raw_data/2023.10.17_DURIN Plant Functional Traits_Lygra Sognd
       envelope_ID %in% c("ALL1763", "AWF5086", "BBM8747",
                          "DAI1197", "DZX9994", "BLM2549",
                          "AVI9865", "ATG1962", "AVY7377") ~ "Vaccinium vitis-idaea",
+      envelope_ID == "ARR7615" ~ "Vaccinium myrtillus",
       TRUE ~ species
     ),
     # Correct wet mass
