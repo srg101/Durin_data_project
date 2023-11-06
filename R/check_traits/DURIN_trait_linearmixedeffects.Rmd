@@ -1,0 +1,195 @@
+---
+title: "DURIN Trait Linear Mixed Effects Models"
+author: "Sonya R. Geange"
+output: html_notebook
+---
+
+
+```{r}
+#### Packages ----
+# remotes::install_github("Between-the-Fjords/dataDownloader")
+library(dataDownloader)
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+library(broom)
+library(ggeffects)
+library(ggplot2)
+
+#### Load dataset from OSF ----
+## 2023.10.31 SRG also has authentication issue - downloaded manually for now
+
+# Download current cleaned dataset
+# Version 21.10.23
+    # get_file(node = "f4v9t",
+    #          file = "DURIN_clean.csv",
+    #          path = "raw_data",
+    #          remote_path = "Vegetation/clean_data")
+
+data_DURIN_raw <- read.csv("output/DURIN_clean.csv", na.strings = c("", "NA"))
+
+##### Define custom functions ----
+
+# 'Not in' rather than 'in'
+`%notin%` <- Negate(`%in%`)
+
+
+#### Clean-up dataset ----
+# Create subsetted wide dataset for DURIN plots only and relevant attributes
+data_DURIN <- data_DURIN_raw %>%
+  filter(project == "Field - Traits") %>% # Only select from trait not physiology work
+  drop_na(DURIN_plot) %>%  # Ignore the DroughtNet Treatments for now
+  # Select key columns only - first by rearranging dataset so all traits together
+  relocate(c(leaf_area, SLA, dry_mass_g, wet_mass_g, LDMC, leaf_thickness_1_mm:leaf_thickness_3_mm), .after = leaf_age) %>% 
+  select(envelope_ID, day, month, year, siteID, habitat, plotNR, DURIN_plot, species, plant_nr, leaf_nr, calluna_shoot_type, leaf_age:leaf_thickness_3_mm, plant_height)
+
+# Add concatenated name for leaf ID
+data_DURIN$uniqueleafID <- paste0(data_DURIN$DURIN_plot, "_",data_DURIN$plant_nr,"_", data_DURIN$leaf_age,"_", data_DURIN$calluna_shoot_type, "_", data_DURIN$leaf_nr)
+
+# Need balanced data - so check out how many individual there are per sites/treatment etc
+individual_count <- data_DURIN %>% 
+  group_by(DURIN_plot, plant_nr, leaf_age, calluna_shoot_type,leaf_nr) %>% 
+  summarize(n = n())
+# Check using concatenated code alternative
+individual_count_v2 <- data_DURIN %>% 
+  group_by(uniqueleafID) %>% 
+  summarize(n = n())
+
+# Still seems to be quite a few situations where we have multiple leaves/enevelopes for the same site, habitat, plot, plant, leaf age, shoot type, leaf number.
+# Highlight those with more than 2 records
+individual_issues <- data_DURIN %>% 
+  group_by(uniqueleafID) %>% 
+  summarize(n = n()) %>% 
+  filter(n >1)
+
+# Create mini-dataset for just the ones with these issues
+issue_IDs <- unique(individual_issues$uniqueleafID)
+data_DURIN_individual_issues <- data_DURIN %>% 
+  filter(uniqueleafID %in% issue_IDs)
+write.csv(data_DURIN_individual_issues, "output/data_DURIN_individual_issues.csv")
+  
+# Remove these problematic ones for now, COME BACK TO LATER ON!
+data_DURIN_clean <- data_DURIN %>% 
+  filter(uniqueleafID %notin% issue_IDs)
+
+##### Add some new columns to describe the experimental set-up ----
+# Lygra and Senja as our coastal sites, and Sogndal and Kautokeino as our inland sites
+# Lygra and Songdal as our southern sites, and Kautokeino and Senja as our northern sites
+data_DURIN_clean <- data_DURIN_clean %>% 
+  mutate(north_south = factor(siteID, levels = c("Lygra", "Senja", "Sogndal", "Kautokeino"),
+                              labels = c("North", "North", "South", "South"))) %>% 
+    mutate(coast_inland = factor(siteID, levels = c("Lygra", "Senja", "Sogndal", "Kautokeino"),
+                              labels = c("Coast", "Coast", "Inland", "Inland")))
+
+# Long format version of dataset
+data_DURIN_long <- data_DURIN_clean %>% 
+  pivot_longer(cols = leaf_area:plant_height, names_to = "trait", values_to = "value")
+
+# Note, we have up to three meausres for leaf thickness, and only one measure of each other trait
+data_DURIN_long <- data_DURIN_long %>% 
+  mutate(trait = replace(trait,
+                         trait == "leaf_thickness_1_mm" | trait == "leaf_thickness_2_mm" | trait == "leaf_thickness_3_mm",
+                         "leaf_thickness"))
+
+# Reorder the levels of our factors, so no longer just alphabetical
+data_DURIN_long <- data_DURIN_long %>% 
+  mutate(leaf_age = factor(leaf_age, levels = c("young", "old"),
+                    labels = c("Young", "Old"))) %>% 
+           mutate(trait_alt = factor(trait, levels = c("leaf_area", "SLA", "LDMC", "dry_mass_g",
+                                                   "leaf_thickness","wet_mass_g", "plant_height"),
+                 labels = c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)", "Dry mass (g)",
+                            "Leaf thickness (mm)", "Wet mass (g)", "Plant Height (cm)")))
+
+# Drop rows with NA values for traits
+data_DURIN_long <- data_DURIN_long %>% 
+  drop_na(value)
+
+
+
+
+```
+
+```{r}
+#### Linear Mixed Effects Models ----
+#### Run Models ----
+# Load required packages
+library(lme4)
+library(tidyverse)
+library(emmeans)
+library(broom.mixed)
+library(writexl)
+install.packages("MuMIn")
+library(MuMIn)
+library(officer)
+
+
+# Load data
+#data <- read.csv("path/to/your/data.csv")
+
+# Define variables
+traits <- c("leaf_area", "SLA", "LDMC", "dry_mass_g", "leaf_thickness", "wet_mass_g", "plant_height")
+
+# Loop through each trait
+for (trait in traits) {
+      # Fit linear mixed effects model with random effects of plant_nr and leaf_nr nested within plant_nr
+      model1 <- lmer(value ~ species * habitat + (1 | DURIN_plot/plant_nr), data = data_DURIN_long)
+      
+      # Fit alternative models with fixed effects of species, habitat, and siteID, along with interactions
+      model2 <- lmer(value ~ species + habitat + (1 | DURIN_plot/plant_nr), data = data_DURIN_long)
+      model3 <- lmer(value ~ species + siteID + habitat + (1 | DURIN_plot/plant_nr), data = data_DURIN_long)
+      model4 <- lmer(value ~ species * siteID * habitat + (1 | DURIN_plot/plant_nr), data = data_DURIN_long)
+      
+# Compare AICc values to determine best model for dataset
+  model_select <- AICc(model1, model2, model3, model4)
+  
+  # Select best model based on AICc value
+  best_model <- get(paste0("model", which.min(model_select$AICc)))}
+      
+# Generate a summary table of estimated means accounting for the interaction term of site and land type
+  summary_table <- emmeans(best_model, ~ species + habitat + siteID) %>%
+    as_tibble() %>%
+    select(species, habitat, siteID, emmean, SE, df, asymp.LCL, asymp.UCL)
+  
+  # Export summary table and ANOVA analysis output to Word document
+  doc <- read_docx()
+  doc <- body_add_table(doc, summary_table)
+  doc <- body_add_par(doc,
+                      paste0("ANOVA Analysis Output:\n",
+                             capture.output(anova(best_model))))
+  print(doc,
+        target = paste0(metric,
+                        "_summary_table.docx"))
+    }
+      # Generate ggplot with estimated means and raw data plots for each combination of species and habitat within siteID
+      ggplot(summary_table, aes(x = species, y = value)) +
+        geom_violin(aes(fill = habitat), scale = "width") +
+        geom_jitter(aes(color = habitat), width = 0.2) +
+        geom_pointrange(aes(ymin = emmean - SE*qt(0.975, df), ymax = emmean + SE*qt(0.975, df)), shape = 21,
+                        size = 2.5, fill = "white") +
+        facet_grid(rows = vars(siteID)) +
+        labs(title = paste(trait, "-", site, "-", hab),
+             x = NULL,
+             y = "Trait Value",
+             fill = "Habitat",
+             color = NULL) +
+        theme_bw() +
+        theme(panel.grid.major.x = element_blank(),
+              panel.grid.minor.x = element_blank(),
+              panel.grid.major.y = element_line(color="gray80"),
+              panel.grid.minor.y = element_blank(),
+              axis.text.x=element_text(angle=45,hjust=1),
+              legend.position="bottom",
+              legend.title=element_blank())
+      
+      # Save ggplot as an .svg file with labels indicating the trait represented
+      ggsave(paste0(trait,"_",site,"_",hab,".svg"), width=10,height=6)
+    }
+  }
+}
+
+# Output summary sentence based on linear mixed effects model outputs
+cat("Based on the linear mixed effects model outputs, we can conclude that either species or habitat has a significant influence on at least one of the plant traits.\n")
+
+```
+
+
