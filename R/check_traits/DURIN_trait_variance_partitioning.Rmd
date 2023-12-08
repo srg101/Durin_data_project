@@ -75,7 +75,7 @@ individual_issues <- data_DURIN %>%
 issue_IDs <- unique(individual_issues$uniqueleafID)
 data_DURIN_individual_issues <- data_DURIN %>% 
   filter(uniqueleafID %in% issue_IDs)
-write.csv(data_DURIN_individual_issues, "output/data_DURIN_individual_issues.csv")
+write.csv(data_DURIN_individual_issues, "C:/Users/geang/Documents/UiB/Durin_data_project/output/data_DURIN_individual_issues.csv")
   
 # Remove these problematic ones for now, COME BACK TO LATER ON!
 data_DURIN_clean <- data_DURIN %>% 
@@ -181,7 +181,7 @@ library(patchwork)
   #coord_flip() +
   theme(strip.background = element_blank(),
         ggh4x.facet.nestline = element_line(colour = "black"),
-        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+        axis.text.x = element_text(angle = 45, vjust = 0.99, hjust = 1)))
 
 
 # Plot  traits together, with site and leaf age as a grouping factors - Version 1 ----
@@ -203,7 +203,7 @@ library(patchwork)
   #coord_flip() +
   theme(strip.background = element_blank(),
         ggh4x.facet.nestline = element_line(colour = "black"),
-        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+        axis.text.x = element_text(angle = 45, vjust = 0.99, hjust = 1)))
 ```
 
 # Variance Partitioning
@@ -256,6 +256,24 @@ data_DURIN_long_log <- data_DURIN_long %>%
   geom_density(alpha = 0.2) +
   facet_nested(species ~ trait, scales = "free", independent = "all") +
   labs(title = "Trait Distribution Log (natural)"))
+
+#plotting log transformed traits to confirm skew is gone
+# With habitat in as well
+(data_DURIN_long_log %>% 
+  ggplot(aes(x = value, fill = species)) +
+  geom_density(alpha = 0.2) +
+  facet_nested(siteID+habitat ~ trait, scales = "free", independent = "all") +
+  labs(title = "Trait Distribution 2.0 Log (natural)") +
+  theme_minimal())
+
+#plotting log transformed traits to confirm skew is gone
+# With habitat in as well
+(data_DURIN_long_log %>% 
+  ggplot(aes(x = value, fill = habitat)) +
+  geom_density(alpha = 0.2) +
+  facet_nested(species*siteID ~ trait, scales = "free", independent = "none") +
+  labs(title = "Trait Distribution 3.0 Log (natural)") +
+  theme_minimal())
 
 #### Model Structure 2 - species/siteID/habitat/plant_nr ####
 # Here, we have leaves as the final level along with unexplained variation.
