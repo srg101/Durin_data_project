@@ -25,10 +25,10 @@ library(dataDownloader)
 # Version 21.10.23
 get_file(node = "f4v9t",
          file = "DURIN_clean.csv",
-         path = "raw_data",
+         path = "data/clean_data",
          remote_path = "Vegetation/clean_data")
 
-data_DURIN_raw <- read.csv("output/DURIN_clean.csv", na.strings = c("", "NA"))
+data_DURIN_raw <- read.csv("data/clean_data/DURIN_clean.csv", na.strings = c("", "NA"))
 ```
 
 
@@ -75,7 +75,7 @@ individual_issues <- data_DURIN %>%
 issue_IDs <- unique(individual_issues$uniqueleafID)
 data_DURIN_individual_issues <- data_DURIN %>% 
   filter(uniqueleafID %in% issue_IDs)
-write.csv(data_DURIN_individual_issues, "C:/Users/geang/Documents/UiB/Durin_data_project/output/data_DURIN_individual_issues.csv")
+write.csv(data_DURIN_individual_issues, "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/data_DURIN_individual_issues.csv")
   
 # Remove these problematic ones for now, COME BACK TO LATER ON!
 data_DURIN_clean <- data_DURIN %>% 
