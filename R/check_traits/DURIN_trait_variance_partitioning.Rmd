@@ -28,13 +28,13 @@ get_file(node = "f4v9t",
          path = "data/clean_data",
          remote_path = "Vegetation/clean_data")
 
-data_DURIN_raw <- read.csv("data/clean_data/DURIN_clean.csv", na.strings = c("", "NA"))
+data_DURIN_raw_OSF <- read.csv("data/clean_data/DURIN_clean.csv", na.strings = c("", "NA"))
 ```
 
 
 ```{r}
 # Create subsetted wide dataset for DURIN plots only and relevant attributes
-data_DURIN <- data_DURIN_raw %>%
+data_DURIN <- data_DURIN_raw_OSF %>%
   filter(project == "Field - Traits") %>% # Only select from trait not physiology work
   drop_na(DURIN_plot) %>%  # Ignore the DroughtNet Treatments for now
   # Select key columns only - first by rearranging dataset so all traits together
@@ -48,7 +48,7 @@ data_DURIN <- data_DURIN_raw %>%
 # Add concatenated name for leaf ID
 data_DURIN$uniqueleafID <- paste0(data_DURIN$DURIN_plot, "_",data_DURIN$plant_nr,"_", data_DURIN$leaf_age,"_", data_DURIN$calluna_shoot_type, "_", data_DURIN$leaf_nr)
 
-# Alterantive version using individual components for DURIN_plot
+# Alternative version using individual components for DURIN_plot
 # Add species without white space column
 data_DURIN$species_ws <- gsub(" ", "_", data_DURIN$species)
 data_DURIN$uniqueleafID_V2 <- paste0(data_DURIN$siteID,"_",data_DURIN$habitat,"_", data_DURIN$species_ws, "_", data_DURIN$plotNR, "_",data_DURIN$plant_nr,"_", data_DURIN$leaf_age,"_", data_DURIN$calluna_shoot_type, "_", data_DURIN$leaf_nr)
@@ -64,7 +64,7 @@ individual_count_v2 <- data_DURIN %>%
   group_by(uniqueleafID) %>% 
   summarize(n = n())
 
-# Still seems to be quite a few situations where we have multiple leaves/enevelopes for the same site, habitat, plot, plant, leaf age, shoot type, leaf number.
+# Still seems to be quite a few situations where we have multiple leaves/envelopes for the same site, habitat, plot, plant, leaf age, shoot type, leaf number.
 # Highlight those with more than 2 records
 individual_issues <- data_DURIN %>% 
   group_by(uniqueleafID) %>% 
@@ -75,7 +75,7 @@ individual_issues <- data_DURIN %>%
 issue_IDs <- unique(individual_issues$uniqueleafID)
 data_DURIN_individual_issues <- data_DURIN %>% 
   filter(uniqueleafID %in% issue_IDs)
-write.csv(data_DURIN_individual_issues, "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/data_DURIN_individual_issues.csv")
+write.csv(data_DURIN_individual_issues, "output/data_DURIN_individual_issues.csv")
   
 # Remove these problematic ones for now, COME BACK TO LATER ON!
 data_DURIN_clean <- data_DURIN %>% 
@@ -86,7 +86,7 @@ data_DURIN_clean <- data_DURIN %>%
 data_DURIN_long <- data_DURIN_clean %>% 
   pivot_longer(cols = leaf_area:plant_height, names_to = "trait", values_to = "value")
 
-# Note, we have up to three meausres for leaf thickness, and only one measure of each other trait
+# Note, we have up to three measures for leaf thickness, and only one measure of each other trait
 data_DURIN_long <- data_DURIN_long %>% 
   mutate(trait = replace(trait,
                          trait == "leaf_thickness_1_mm" | trait == "leaf_thickness_2_mm" | trait == "leaf_thickness_3_mm",
@@ -121,10 +121,11 @@ library(ggh4x)
 library(viridis)
 library(patchwork)
 
-## Plot  traits together, ignoring site for now ----
+## Plot  traits together, ignoring site for now, only include young leaves ----
 (ggplot(data_DURIN_long %>% 
          filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
-                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")), 
+                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")
+                 & leaf_age == "Young"), 
          # drop_na(leaf_age),
        aes(x = habitat, y = value, fill = species, color = species)) +
   geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
@@ -142,10 +143,11 @@ library(patchwork)
         axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
 
 
-## Plot  traits together, with site as a grouping factor - Version 1 ----
+## Plot  traits together, with site as a grouping factor, only young leaves - Version 1 ----
 (ggplot(data_DURIN_long %>% 
          filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
-                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")), 
+                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")
+                & leaf_age == "Young"), 
          # drop_na(leaf_age),
        aes(x = habitat, y = value, fill = siteID, color = siteID)) +
   geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
@@ -162,10 +164,11 @@ library(patchwork)
         ggh4x.facet.nestline = element_line(colour = "black"),
         axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
 
-# Plot  traits together, with site as a grouping factor - Version 2 ----
+# Plot  traits together, with site as a grouping factor, only young leaves - Version 2 ----
 (ggplot(data_DURIN_long %>% 
          filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
-                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")), 
+                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")
+                & leaf_age == "Young"), 
          # drop_na(leaf_age),
        aes(x = siteID, y = value, fill = habitat, color = habitat)) +
   geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
@@ -197,6 +200,29 @@ library(patchwork)
   scale_color_viridis(discrete=T) +
   # scale_y_log10() +
   facet_nested(siteID + leaf_age ~ trait, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "DURIN Site", y = "Trait Value", fill = "Habitat", color = NA) +
+  theme_bw() +
+  #coord_flip() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.99, hjust = 1)))
+
+# Plot  traits together, with site and leaf age as a grouping factors - Version 2 ----
+# Restricted to only two species with young and old leaf traits, EN and VV
+(ggplot(data_DURIN_long %>% 
+         filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
+                             "Dry mass (g)", "Leaf thickness (mm)")
+                & species %in% c("Empetrum nigrum","Vaccinium vitis-idaea")), 
+         # drop_na(leaf_age),
+       aes(x = habitat, y = value, fill = leaf_age, color = leaf_age)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(aes(), outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_fill_viridis(discrete=T) +
+  scale_color_viridis(discrete=T) +
+  # scale_y_log10() +
+  facet_nested(siteID + species ~ trait, scales = "free", independent = "y",
                nest_line = element_line(linetype = 2)) +
   labs(x = "DURIN Site", y = "Trait Value", fill = "Habitat", color = NA) +
   theme_bw() +
