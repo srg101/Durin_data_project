@@ -111,7 +111,7 @@ data_DURIN_long <- data_DURIN_long %>%
 # Lygra and Songdal as our southern sites, and Kautokeino and Senja as our northern sites
 data_DURIN_long <- data_DURIN_long %>% 
   mutate(north_south = factor(siteID, levels = c("Lygra", "Senja", "Sogndal", "Kautokeino"),
-                              labels = c("North", "North", "South", "South"))) %>% 
+                              labels = c("South", "North", "South", "North"))) %>% 
     mutate(coast_inland = factor(siteID, levels = c("Lygra", "Senja", "Sogndal", "Kautokeino"),
                               labels = c("Coast", "Coast", "Inland", "Inland")))
 
@@ -548,4 +548,769 @@ VP_Plot2_habitat
 
 ```
 
+
+```{r}
+# Mixed effects model analysis
+library(lmerTest)
+library(interactions)
+library(emmeans)
+
+# Only young leaves
+data_DURIN_young <- data_DURIN %>% filter(leaf_age == "young")
+
+mixed.lmer <- lmer(SLA ~ habitat*siteID*species + (1|DURIN_plot) ,data = data_DURIN_young)
+summary(mixed.lmer)
+anova(mixed.lmer)
+
+(plot_cat <- cat_plot(mixed.lmer, pred = siteID, modx = habitat, mod2 = species, interval = TRUE)) 
+# Posthoc testing
+posthoc <- emmeans(mixed.lmer, pairwise ~ habitat|siteID|species, adjust = "tukey")
+summary(posthoc)
+
+
+# Predicted outcomes
+# data_DURIN_young$predicted <- predict(mixed.lmer)
+# 
+# # Get the pairs that are significantly different
+# sig_pairs <- summary(posthoc)$p.value < 0.05
+# sig_pairs <- posthoc$sig_pairs[sig_pairs]
+# 
+# # Plotting with ggplot2
+# p <- ggplot(data_DURIN_young, aes(x=habitat, y=predicted, color=siteID)) +
+#   geom_point() +
+#   facet_wrap(~species) +
+#   labs(title="Predicted Outcomes", x="Habitat", y="Predicted Response") +
+#   theme_minimal()
+# 
+# # Add significance labels
+# for(pair in sig_pairs) {
+#   p <- p + geom_signif(comparisons = list(pair), test="t.test", map_signif_level=TRUE)
+# }
+# 
+# print(p)
+
+
+(p1 <- emmip(mixed.lmer, habitat ~ species|siteID, CIs = TRUE))
+(p2 <- emmip(mixed.lmer, habitat ~ siteID|species, CIs = TRUE))
+(p3 <- emmip(mixed.lmer, species ~ siteID|habitat, CIs = TRUE))
+
+
+# Leaf Dry Matter Content
+mixed.lmer.LDMC <- lmer(LDMC ~ habitat*siteID*species + (1|DURIN_plot) ,data = data_DURIN_young)
+summary(mixed.lmer.LDMC)
+anova(mixed.lmer.LDMC)
+
+(plot_cat.LDMC <- cat_plot(mixed.lmer.LDMC, pred = siteID, modx = habitat, mod2 = species, interval = TRUE)) 
+
+
+# Plant Height
+mixed.lmer.Height <- lmer(plant_height ~ habitat*siteID*species + (1|DURIN_plot) ,data = data_DURIN_young)
+summary(mixed.lmer.Height)
+anova(mixed.lmer.Height)
+
+(plot_cat.Height <- cat_plot(mixed.lmer.Height, pred = siteID, modx = habitat, mod2 = species, interval = TRUE)) 
+
+# Leaf Area
+mixed.lmer.LeafArea <- lmer(leaf_area ~ habitat*siteID*species + (1|DURIN_plot) ,data = data_DURIN_young)
+summary(mixed.lmer.LeafArea)
+anova(mixed.lmer.LeafArea)
+
+(plot_cat.LeafArea <- cat_plot(mixed.lmer.LeafArea, pred = siteID, modx = habitat, mod2 = species, interval = TRUE)) 
+
+# Leaf Thickness
+# Average first
+
+data_DURIN_young$leaf_thickness_ave <- rowMeans(data_DURIN_young[ , c(16,17,18)], na.rm=TRUE)
+       
+mixed.lmer.LeafThickness <- lmer(leaf_thickness_ave ~ habitat*siteID*species + (1|DURIN_plot) ,data = data_DURIN_young)
+summary(mixed.lmer.LeafThickness)
+anova(mixed.lmer.LeafThickness)
+
+(plot_cat.LeafThickness <- cat_plot(mixed.lmer.LeafThickness, pred = siteID, modx = habitat, mod2 = species, interval = TRUE)) 
+```
+
+
+```{r}
+library(scales)
+ggsave <- function(..., bg = 'white') ggplot2::ggsave(..., bg = bg)
+# Define colour palette
+Habitat <- c("Forested" = "#083508", "Open" = "#589758")
+Species <- c("Calluna vulgaris" = "#DF697E",
+             "Empetrum nigrum" = "#404040",
+             "Vaccinium myrtillus" = "#323284",
+             "Vaccinium vitis-idaea" = "#D93137")
+# siteID <- c("Lygra" = "darkred",
+#             "Sogndal" = "darkblue",
+#             "Senja" = ,
+#             "Kautokeino" = )
+
+(plant_height_plot <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+               mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("Plant Height (cm)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(labels = label_wrap(10)) +
+  #scale_fill_viridis(discrete = T) +
+  #scale_color_viridis(discrete = T) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Species", y = "Plant Height (cm)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+        legend.position = "bottom",
+        legend.justification = c("center"),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+ggsave(plot = plant_height_plot, filename = "Plant_Height.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 15, height = 10, units = "cm")
+
+(leaf_area_plot <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("Leaf area (cm^2)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Species", y = "Leaf Area (cm^2)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+                legend.position = "bottom",
+                legend.justification = c("center"),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+
+ggsave(plot = leaf_area_plot, filename = "Leaf_Area.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 15, height = 10, units = "cm")
+
+
+(SLA_plot <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("SLA (cm^2/g)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Species", y = "SLA (cm^2/g)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+                legend.position = "bottom",
+                legend.justification = c("center"),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+ggsave(plot = SLA_plot, filename = "SLA.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 15, height = 10, units = "cm")
+
+
+(LDMC_plot <- ggplot(data_DURIN_long %>% 
+                     mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%             
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("LDMC (mg/g)")
+                & leaf_age == "Young" & value < 600), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Species", y = "LDMC (mg/g)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+                legend.position = "bottom",
+                legend.justification = c("center"),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle =20, vjust = 0.5, hjust = 0.5)))
+
+ggsave(plot = LDMC_plot, filename = "LDMC.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 15, height = 10, units = "cm")
+
+
+(Leaf_Thickness_plot <- ggplot(data_DURIN_long %>% 
+               mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%  
+            mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("Leaf thickness (mm)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.2) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.8) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Species", y = "Leaf thickness (mm)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+                legend.position = "bottom",
+                legend.justification = c("center"),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+
+ggsave(plot = Leaf_Thickness_plot, filename = "Leaf_Thickness.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 15, height = 10, units = "cm")
+
+```
+
+```{r}
+
+# Plant height is shorter in the north, and inland, and under open rather than forested conditions
+# Mostly driven by responses of two key species, calluna vulgaris and Vaccinium myrtillus at the coastal southern site of Lygra
+
+(plant_height_plot_2 <- ggplot(data_DURIN_long %>%
+            mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("Plant Height (cm)")
+                & leaf_age == "Young"),
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  #scale_fill_viridis(discrete = T) +
+  #scale_color_viridis(discrete = T) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  scale_x_discrete(labels = label_wrap(10)) +
+  labs(x = "Site Location", y = "Plant Height (cm)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+
+
+
+(leaf_area_plot_2 <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("Leaf area (cm^2)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+        aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Site Location", y = "Leaf Area (cm^2)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+(SLA_plot <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("SLA (cm^2/g)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = siteID_ord, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Site Location", y = "SLA (cm^2/g)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+(LDMC_plot <- ggplot(data_DURIN_long %>% 
+                     mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%              
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("LDMC (mg/g)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = siteID_ord, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Site Location", y = "LDMC (mg/g)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle =20, vjust = 0.5, hjust = 0.5)))
+
+
+(Leaf_Thickness_plot <- ggplot(data_DURIN_long %>% 
+               mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%  
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("Leaf thickness (mm)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.2) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.8) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Site Location", y = "Leaf thickness (mm)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+```
+
+```{r}
+library(scales)
+ggsave <- function(..., bg = 'white') ggplot2::ggsave(..., bg = bg)
+# Define colour palette
+Habitat <- c("Forested" = "#083508", "Open" = "#589758")
+Species <- c("Calluna vulgaris" = "#DF697E",
+             "Empetrum nigrum" = "#404040",
+             "Vaccinium myrtillus" = "#323284",
+             "Vaccinium vitis-idaea" = "#D93137")
+# siteID <- c("Lygra" = "darkred",
+#             "Sogndal" = "darkblue",
+#             "Senja" = ,
+#             "Kautokeino" = )
+
+(plant_height_plot_2 <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+               mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("Plant Height (cm)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(labels = label_wrap(10)) +
+  #scale_fill_viridis(discrete = T) +
+  #scale_color_viridis(discrete = T) +
+   scale_fill_manual(values = Species) +
+   scale_color_manual(values = Species) +
+  # scale_y_log10() +
+facet_grid(siteID ~., scales = "fixed") +
+  labs(x = "Habitat", y = "Plant Height (cm)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+        legend.position = "right",
+        legend.justification = c("center"),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+ggsave(plot = plant_height_plot_2, filename = "Plant_Height.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 15, height = 10, units = "cm")
+
+(leaf_area_plot_2 <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("Leaf area (cm^2)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Species", y = "Leaf Area (cm^2)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+                legend.position = "right",
+                legend.justification = c("center"),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+
+ggsave(plot = leaf_area_plot_2, filename = "Leaf_Area.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 15, height = 10, units = "cm")
+
+
+(SLA_plot_2 <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("SLA (cm^2/g)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Species", y = "SLA (cm^2/g)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+                legend.position = "bottom",
+                legend.justification = c("center"),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+ggsave(plot = SLA_plot_2, filename = "SLA.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 15, height = 10, units = "cm")
+
+
+(LDMC_plot_2 <- ggplot(data_DURIN_long %>% 
+                     mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%             
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("LDMC (mg/g)")
+                & leaf_age == "Young" & value < 600), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.1) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Species", y = "LDMC (mg/g)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+                legend.position = "bottom",
+                legend.justification = c("center"),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle =20, vjust = 0.5, hjust = 0.5)))
+
+ggsave(plot = LDMC_plot_2, filename = "LDMC.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 15, height = 10, units = "cm")
+
+
+(Leaf_Thickness_plot_2 <- ggplot(data_DURIN_long %>% 
+               mutate(siteID_ord = fct_relevel(siteID,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%  
+            mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("Leaf thickness (mm)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.2) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.8) +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+facet_grid(north_south_ord ~coast_inland_ord, scales = "fixed") +
+  labs(x = "Species", y = "Leaf thickness (mm)") +
+  theme_half_open() +
+  theme(strip.background = element_blank(),
+                legend.position = "bottom",
+                legend.justification = c("center"),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)))
+
+
+ggsave(plot = Leaf_Thickness_plot_2, filename = "Leaf_Thickness.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 15, height = 10, units = "cm")
+
+```
+
+
+
+```{r}
+data_DURIN_long$siteID_climate_climate <- recode_factor(data_DURIN_long$siteID_climate,
+                                                Lygra = "Sth Coastal", 
+                                Sogndal = "Sth Inland",
+                                Senja = "Nth Coastal",
+                                Kautokeino = "Nth Inland")
+
+
+(plant_height_plot_3 <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_climate_climate = fct_relevel(siteID_climate,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%             
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("SLA (cm^2/g)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = siteID_climate_climate, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+  facet_nested(.~ species, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "DURIN Site", y = "Plant Height (cm)", fill = "Habitat", color = NA) +
+  theme_bw() +
+  #coord_flip() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.99, hjust = 1)))
+
+
+ggsave(plot = plant_height_plot_3, filename = "Plant_Height_3.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 25, height = 15, units = "cm")
+
+
+
+(leaf_area_plot_3 <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_climate_climate = fct_relevel(siteID_climate,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%             
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("Leaf area (cm^2)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = siteID_climate_climate, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+  facet_nested(.~ species, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "DURIN Site", y = "Leaf area (cm^2)", fill = "Habitat", color = NA) +
+  theme_bw() +
+  #coord_flip() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.99, hjust = 1)))
+
+
+ggsave(plot = leaf_area_plot_3, filename = "Leaf_Area_3.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 25, height = 15, units = "cm")
+
+
+(SLA_plot_3 <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_climate_climate = fct_relevel(siteID_climate,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%             
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("SLA (cm^2/g)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = siteID_climate_climate, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+  facet_nested(.~ species, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "DURIN Site", y = "SLA (cm^2/g)", fill = "Habitat", color = NA) +
+  theme_bw() +
+  #coord_flip() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.99, hjust = 1)))
+
+
+ggsave(plot = SLA_plot_3, filename = "SLA_3.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 25, height = 15, units = "cm")
+
+
+
+
+(LDMC_plot_3 <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_climate_climate = fct_relevel(siteID_climate,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%             
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("LDMC (mg/g)")
+                & leaf_age == "Young" & value < 600), 
+         # drop_na(leaf_age),
+       aes(x = siteID_climate_climate, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+  facet_nested(.~ species, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "DURIN Site", y = "LDMC (mg/g)", fill = "Habitat", color = NA) +
+  theme_bw() +
+  #coord_flip() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.99, hjust = 1)))
+
+
+ggsave(plot = LDMC_plot_3, filename = "LDMC_3.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 25, height = 15, units = "cm")
+
+
+
+
+(Leaf_Thickness_plot_3 <- ggplot(data_DURIN_long %>% 
+            mutate(siteID_climate_climate = fct_relevel(siteID_climate,
+            "Senja", "Kautokeino", "Lygra",
+            "Sogndal")) %>%             
+                          mutate(coast_inland_ord = fct_relevel(coast_inland,
+            "Coast", "Inland")) %>%
+            mutate(north_south_ord = fct_relevel(north_south,
+            "North", "South")) %>%
+         filter(trait %in% c("Leaf thickness (mm)")
+                & leaf_age == "Young" & value < 600), 
+         # drop_na(leaf_age),
+       aes(x = siteID_climate_climate, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_x_discrete(labels = label_wrap(10)) +
+   scale_fill_manual(values = Habitat) +
+   scale_color_manual(values = Habitat) +
+  # scale_y_log10() +
+  facet_nested(.~ species, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "DURIN Site", y = "Leaf thickness (mm)", fill = "Habitat", color = NA) +
+  theme_bw() +
+  #coord_flip() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.99, hjust = 1)))
+
+
+ggsave(plot = Leaf_Thickness_plot_3, filename = "Leaf_Thickness_3.png",
+       path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/Plant Traits/",
+       width = 25, height = 15, units = "cm")
+
+```
+
+```{r}
+
+```
 
