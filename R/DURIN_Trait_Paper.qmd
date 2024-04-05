@@ -1,0 +1,307 @@
+---
+title: "DURIN Trait Paper"
+format: 
+  html:
+    code-fold: false
+    toc: true
+    toc-location: left
+    code-overflow: wrap
+    fig-align: center
+    fig-format: png
+    fig-cap-location: bottom
+    fig-dpi: 600
+editor: visual
+filters:
+  - lightbox
+lightbox: auto
+author: "Sonya Geange"
+date: "04/04/2024"
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+## Load packages and DURIN trait dataset from OSF
+
+```{r}
+#### Load packages ----
+library(tidyverse)
+# remotes::install_github("Between-the-Fjords/dataDownloader")
+library(dataDownloader)
+library(osfr)
+# Define custom functions
+`%notin%` <- Negate(`%in%`)
+
+#### Load dataset from OSF ----
+# Update to be your own OSF authenticated code
+osf_auth(Sys.getenv("OSF_AUTH"))
+
+# Download current cleaned dataset from OSF
+get_file(node = "f4v9t",
+         file = "DURIN_clean.csv",
+         path = "data/clean_data",
+         remote_path = "Vegetation/clean_data")
+
+# Read in a name
+data_DURIN_raw_OSF <- read.csv("data/clean_data/DURIN_clean.csv", na.strings = c("", "NA"))
+```
+
+## Clean and tidy dataset
+
+For now reduce and rearrange the dataset, focusing only on DURIN plots not DroughtNet, and leaves collected during the 2022 summer field sampling campaign. Add meta-data columns for leafID's with concatenated names.
+
+```{r}
+# Create subsetted wide dataset for DURIN plots only and relevant attributes
+data_DURIN <- data_DURIN_raw_OSF %>%
+  filter(project == "Field - Traits") %>% # Only select from trait not physiology work
+  drop_na(DURIN_plot) %>%  # Ignore the DroughtNet Treatments for now
+  # Select key columns only - first by rearranging dataset so all traits together
+  relocate(c(leaf_area, SLA, dry_mass_g, wet_mass_g, LDMC, leaf_thickness_1_mm:leaf_thickness_3_mm), .after = leaf_age) %>%
+  select(envelope_ID, siteID, habitat, plotNR, DURIN_plot, species, plant_nr, leaf_nr, calluna_shoot_type, leaf_age:leaf_thickness_3_mm, plant_height)
+
+
+#### Data Organization ####
+
+
+# Add concatenated name for leaf ID
+data_DURIN$uniqueleafID <- paste0(data_DURIN$DURIN_plot, "_",data_DURIN$plant_nr,"_", data_DURIN$leaf_age,"_", data_DURIN$calluna_shoot_type, "_", data_DURIN$leaf_nr)
+
+# Alternative version using individual components for DURIN_plot
+# Add species without white space column
+data_DURIN$species_ws <- gsub(" ", "_", data_DURIN$species)
+data_DURIN$uniqueleafID_V2 <- paste0(data_DURIN$siteID,"_",data_DURIN$habitat,"_", data_DURIN$species_ws, "_", data_DURIN$plotNR, "_",data_DURIN$plant_nr,"_", data_DURIN$leaf_age,"_", data_DURIN$calluna_shoot_type, "_", data_DURIN$leaf_nr)
+
+#TODO: Check duplicates
+
+# Need balanced data - so check out how many individual there are per sites/treatment etc
+individual_count <- data_DURIN %>% 
+  group_by(DURIN_plot, plant_nr, leaf_age, calluna_shoot_type,leaf_nr) %>% 
+  summarize(n = n())
+# Check using concatenated code alternative
+individual_count_v2 <- data_DURIN %>% 
+  group_by(uniqueleafID) %>% 
+  summarize(n = n())
+
+# Still seems to be quite a few situations where we have multiple leaves/envelopes for the same site, habitat, plot, plant, leaf age, shoot type, leaf number.
+# Highlight those with more than 2 records
+individual_issues <- data_DURIN %>% 
+  group_by(uniqueleafID) %>% 
+  summarize(n = n()) %>% 
+  filter(n >1)
+
+# Create mini-dataset for just the ones with these issues
+issue_IDs <- unique(individual_issues$uniqueleafID)
+data_DURIN_individual_issues <- data_DURIN %>% 
+  filter(uniqueleafID %in% issue_IDs)
+# write.csv(data_DURIN_individual_issues, "/output/data_DURIN_individual_issues.csv")
+  
+# Remove these problematic ones for now, COME BACK TO LATER ON!
+data_DURIN_clean <- data_DURIN %>% 
+  filter(uniqueleafID %notin% issue_IDs)
+
+
+# Long format version of dataset
+data_DURIN_long <- data_DURIN_clean %>% 
+  pivot_longer(cols = leaf_area:plant_height, names_to = "trait", values_to = "value")
+
+# Note, we have up to three measures for leaf thickness, and only one measure of each other trait
+data_DURIN_long <- data_DURIN_long %>% 
+  mutate(trait = replace(trait,
+                         trait == "leaf_thickness_1_mm" | trait == "leaf_thickness_2_mm" | trait == "leaf_thickness_3_mm",
+                         "leaf_thickness"))
+
+# Reorder the levels of our factors, so no longer just alphabetical
+data_DURIN_long <- data_DURIN_long %>% 
+  mutate(leaf_age = factor(leaf_age, levels = c("young", "old"),
+                    labels = c("Young", "Old"))) %>% 
+           mutate(trait = factor(trait, levels = c("leaf_area", "SLA", "LDMC", "dry_mass_g",
+                                                   "leaf_thickness","wet_mass_g", "plant_height"),
+                 labels = c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)", "Dry mass (g)",
+                            "Leaf thickness (mm)", "Wet mass (g)", "Plant Height (cm)")))
+
+# Drop rows with NA values for traits
+data_DURIN_long <- data_DURIN_long %>% 
+  drop_na(value)
+
+
+##### Add some new columns to describe the experimental set-up ----
+# Lygra and Senja as our coastal sites, and Sogndal and Kautokeino as our inland sites
+# Lygra and Songdal as our southern sites, and Kautokeino and Senja as our northern sites
+data_DURIN_long <- data_DURIN_long %>% 
+  mutate(north_south = factor(siteID, levels = c("Lygra", "Senja", "Sogndal", "Kautokeino"),
+                              labels = c("South", "North", "South", "North"))) %>% 
+    mutate(coast_inland = factor(siteID, levels = c("Lygra", "Senja", "Sogndal", "Kautokeino"),
+                              labels = c("Coast", "Coast", "Inland", "Inland")))
+```
+
+## Initial visualization
+
+An overview plot of all the traits together when considering young leaves only (@fig-ExploratoryOne). Here we group traits across sites.
+
+```{r}
+#| label: fig-ExploratoryOne
+#| fig-cap: "Exploratory boxplot for all plant functional traits averaged across habitats per species."
+#| fig-width: 12
+#| fig-height: 7
+#| message: false
+#| warning: false
+#| lightbox:
+#|   group: r-graph
+#|   description: This is 1 to 10 plot
+
+# Visualize ----
+library(ggh4x)
+library(viridis)
+library(patchwork)
+
+## Plot  traits together, ignoring site for now, only include young leaves ----
+(Fig1 <- ggplot(data_DURIN_long %>% 
+         filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
+                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")
+                 & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = habitat, y = value, fill = species, color = species)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_fill_viridis(discrete=T) +
+  scale_color_viridis(discrete=T) +
+  # scale_y_log10() +
+  facet_nested(species ~ trait, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "Habitat", fill = "Species") +
+  guides(color = "none") + # Remove the colour legend as same as fill anyhow
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 1.2, hjust = 1.2)))
+
+Fig1
+```
+
+
+![A Lovely Image](@fig-ExploratoryOne){.lightbox}
+
+
+
+See @fig-ExploratoryTwo for examples.
+
+```{r}
+#| label: fig-ExploratoryTwo
+#| fig-cap: "Exploratory boxplots of all plant functional traits together."
+#| fig-subcap: 
+#|      - "a) Site x species"
+#|      - "b) Site x habitat"
+#| layout-nrow: 2
+#| fig-width: 12
+#| fig-height: 7
+
+## Plot  traits together, with site as a grouping factor, only young leaves - Version 1 ----
+(ggplot(data_DURIN_long %>% 
+         filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
+                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = habitat, y = value, fill = siteID, color = siteID)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_fill_viridis(discrete=T) +
+  scale_color_viridis(discrete=T) +
+  # scale_y_log10() +
+  facet_nested(species ~ trait, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "Habitat", fill = "SiteID") +
+  guides(color = "none") + # Remove the colour legend as same as fill anyhow
+  theme_bw() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 1.2, hjust = 1.2)))
+
+
+# Plot  traits together, with site as a grouping factor, only young leaves - Version 2 ----
+(ggplot(data_DURIN_long %>% 
+         filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
+                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")
+                & leaf_age == "Young"), 
+         # drop_na(leaf_age),
+       aes(x = siteID, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_fill_viridis(discrete=T) +
+  scale_color_viridis(discrete=T) +
+  # scale_y_log10() +
+  facet_nested(species ~ trait, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "DURIN Site", y = "Trait Value", fill = "Habitat", color = NA) +
+  guides(color = "none") + # Remove the colour legend as same as fill anyhow
+  theme_bw() +
+  #coord_flip() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 1.2, hjust = 1.2)))
+```
+
+```{r}
+#| label: Fig-ExploratoryThree
+#| fig-cap: "Exploratory boxplots of all plant functional traits together."
+#| fig-subcap: 
+#|      - "a) Species x habitat"
+#|      - "b) Habitat x leaf age"
+#| layout-nrow: 2
+#| fig-width: 12
+#| fig-height: 7
+
+
+# Plot  traits together, with site and leaf age as a grouping factors - Version 1 ----
+(ggplot(data_DURIN_long %>% 
+         filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
+                             "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")), 
+         # drop_na(leaf_age),
+       aes(x = species, y = value, fill = habitat, color = habitat)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(aes(), outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_fill_viridis(discrete=T) +
+  scale_color_viridis(discrete=T) +
+  # scale_y_log10() +
+  facet_nested(siteID + leaf_age ~ trait, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "DURIN Site", y = "Trait Value", fill = "Habitat", color = NA) +
+  guides(color = "none") + # Remove the colour legend as same as fill anyhow
+  theme_bw() +
+  #coord_flip() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.99, hjust = 1)))
+
+# Plot  traits together, with site and leaf age as a grouping factors - Version 2 ----
+# Restricted to only two species with young and old leaf traits, EN and VV
+(ggplot(data_DURIN_long %>% 
+         filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
+                             "Dry mass (g)", "Leaf thickness (mm)")
+                & species %in% c("Empetrum nigrum","Vaccinium vitis-idaea")), 
+         # drop_na(leaf_age),
+       aes(x = habitat, y = value, fill = leaf_age, color = leaf_age)) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2), alpha = 0.3) +
+  geom_boxplot(aes(), outlier.shape = NA, alpha = 0.7) +
+  scale_x_discrete(guide = "axis_nested") +
+  scale_fill_viridis(discrete=T) +
+  scale_color_viridis(discrete=T) +
+  # scale_y_log10() +
+  facet_nested(siteID + species ~ trait, scales = "free", independent = "y",
+               nest_line = element_line(linetype = 2)) +
+  labs(x = "DURIN Site", y = "Trait Value", fill = "Habitat", color = NA) +
+  guides(color = "none") + # Remove the colour legend as same as fill anyhow
+  theme_bw() +
+  #coord_flip() +
+  theme(strip.background = element_blank(),
+        ggh4x.facet.nestline = element_line(colour = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.99, hjust = 1)))
+```
