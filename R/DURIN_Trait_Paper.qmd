@@ -1,5 +1,7 @@
 ---
 title: "DURIN Trait Paper"
+author: "Sonya Geange"
+date: "04/04/2024"
 format: 
   html:
     code-fold: false
@@ -11,34 +13,83 @@ format:
     fig-cap-location: bottom
     fig-dpi: 600
 editor: visual
-filters:
-  - lightbox
 lightbox: auto
-author: "Sonya Geange"
-date: "04/04/2024"
+
 ---
 
-## Quarto
+## DURIN Project Overview
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+The DURIN project focuses on the underappreciated roles of dwarf-shrubs in responding to and influencing global climate change. A fuller overview of the project and it's goals can be found here <https://betweenthefjords.w.uib.no/durin/>.
 
-## Running Code
+In brief:
+The primary objective of the DURIN project is to provide critical new knowledge about an important but underrepresented plant functional type in climate-biosphere science; the dwarf-shrubs of the boreal, alpine, and arctic regions, and simultaneously provide a worked example of an integrated climate response-feedback research workflow. To that end, the secondary objectives are to:
 
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+* Examine variation in dwarf-shrubs physiological and growth responses to climate, and their impacts on microclimate (WP1);
+* Map important species interactions, focusing on ericoid mycorrhizae (ErM) and quantifying key roles in dwarf-shrub carbon dynamics (WP2);
+* Assess how environmental factors and vegetation characteristics impact ecosystem functioning and carbon dynamics (WP3);
+* Use DURIN WP0-3 outcomes to parameterize dwarf-shrubs as a new plant functional type within a terrestrial ecosystem model (WP4);
+* Create optimized data workflows using transparent, reproducible Open Science practices (WP5).
+
+This work focuses on WP1 by analysing the plant functional traits collected during the summer season of 2023 at the four core sampling sites; Lygra, Sogndal, Senja and Kautokeino using the 'DURIN' plots.
+
+
+## Trait Data Collection Overview
+
+Here is a brief overview of the sampling collection for the DURIN sites during 2023, and the trait processing pipeline.
+
+### Leaf collection
+We collected one shoot from three individual shrubs of three of the four focal species in each DURIN plot between 14 June 2023 and 17 July 2023. *Calluna vulgaris* was immature at the first collection date, so we collected it separately on 11 September 2023 (Senja), 22 September (Sogndal), and 28 September 2023 (Lygra). We re-collected missing plants at Lygra on 27 July 2023, as well as three individuals from two DURIN plots of each species for comparison to the first collection dates. To avoid sampling ramets of a single shrub, we sampled from different portions of the plot where possible. We selected shoots with at least three representative leaves for the plot. For *Vaccinium vitis-idaea* and *Empentrum nigrum*, we selected shoots with at least three leaves grown this year (‘new leaves’) and at least three leaves grown last year (‘old leaves’). All leaves collected for *Vaccinium myrtillus* and *C. vulgaris* were new leaves. New leaves were fully expanded at time of collection. Shoots were stored in a sealed plastic bag with a moist paper towel in the field and during transport back to the lab, where the bagged shoots were stored at 4º C until processing.
+
+In the lab, we removed three leaves from each shoot of *V. myrtillus* and *C. vulgaris* and six leaves (three new, three old) from each shoot of *V. vitis-idaea* and *E. nigrum*. Each leaf was processed separately for all traits except chemical analysis which was aggregated by individual plant. For *C. vulgaris*, we designated second season short shoots (see Mohamed and Gimingham 1970 figure 1) as a “leaf” following Ward et al. (2009) and Gaudio et al. (2011). Because of the small leaf size of *E. nigrum* and *C. vulgaris*, we counted multiple leaves (five individual leaves for *E. nigrum* and two short shoots for *C. vulgaris*) as a single bulk leaf for trait measurements. Leaves were stored in a sealed plastic bag with a moist paper towel until fresh matter traits were measured. Leaves were kept at 4º C when not actively being measured.
+
+### Trait measurements
+We measured plant functional traits using a modified protocol from Pérez-Harguindeguy et al. (2013): plant height, wet mass, leaf area, leaf thickness, dry mass, with plans to measure C and N content. Plant height was measured in the field as the standing shrub height before shoot collection. Wet mass was measured on a precision balance accurate to 0.0001 g (balance makes and models varied between sites). Leaf area was measured using a flatbed scanner and a semi-automated protocol based on an external Raspberry Pi computer to standardise measurements between different users. Leaf area was calculated using a modified version of the ‘LeafArea’ R package (Katabuchi, 2015). Leaf thickness was measured at three points on each leaf (or on three different leaves per bulk leaf for E. nigrum) using micrometres accurate to 0.001 mm. Leaves were then dried for 72 hrs at 65º C before dry mass measurements (following the same protocol as wet mass on a balance accurate to 0.00001 g). 
+
+
 
 ## Load packages and DURIN trait dataset from OSF
 
+Our raw trait data is stored on the DURIN OSF, it can be downloaded here.
+
 ```{r}
+#| message: false
+#| warning: false
 #### Load packages ----
-library(tidyverse)
+library(tidyverse)      # data management and organization
 # remotes::install_github("Between-the-Fjords/dataDownloader")
-library(dataDownloader)
-library(osfr)
+library(dataDownloader) # download functions for OSF
+library(osfr)           # OSF authentication etc
+library(readr)          # data read in options
+
+# Data visualization or exporting options
+library(ggplot2)        # plotting
+library(ggh4x)          # additions for ggplot2 figures
+library(viridis)        # colour schemes for ggplot
+library(patchwork)      # figure rearranging functions
+library(reshape2)       # visualization
+library(cowplot)        # to arrange multiple plots in a figure
+library(gcookbook)      # plotting options
+# CRAN version
+# devtools::install_github("johannesbjork/LaCroixColoR")
+library(LaCroixColoR)   # colour options
+library(ggpubr)         # exporting formats
+library(scales)
+
+# Analysis related
+library(lme4)           # analysis
+library(lmerTest)       # statistical comparisons for lme4 models
+library(interactions)   # analysis and visualization of models
+library(emmeans)        # analysis and visualization of models
+
+
+
+
+
 # Define custom functions
 `%notin%` <- Negate(`%in%`)
 
 #### Load dataset from OSF ----
-# Update to be your own OSF authenticated code
+# Update to be own OSF authenticated code
 osf_auth(Sys.getenv("OSF_AUTH"))
 
 # Download current cleaned dataset from OSF
@@ -53,7 +104,11 @@ data_DURIN_raw_OSF <- read.csv("data/clean_data/DURIN_clean.csv", na.strings = c
 
 ## Clean and tidy dataset
 
-For now reduce and rearrange the dataset, focusing only on DURIN plots not DroughtNet, and leaves collected during the 2022 summer field sampling campaign. Add meta-data columns for leafID's with concatenated names.
+Reduce and rearrange the dataset to focus only on DURIN plots not the additionally sampled DroughtNet plots, and also on leaves collected during the 2023 summer field sampling campaign. Add meta-data columns for leafID's with concatenated names.
+
+Check for issues with duplicates.
+
+Relabel and re-level key variables, and factors.
 
 ```{r}
 # Create subsetted wide dataset for DURIN plots only and relevant attributes
@@ -141,26 +196,24 @@ data_DURIN_long <- data_DURIN_long %>%
 
 ## Initial visualization
 
-An overview plot of all the traits together when considering young leaves only (@fig-ExploratoryOne). Here we group traits across sites.
+Overview plots of all the traits together when considering young leaves only. Focus is on identifying outliers or missing datasets. **Note: There are no sampled Calluna vulgaris leaves from Kautokeino.**
+
+Figures are all designed so that if clicked, they will expand to full screen for better visualization.
 
 ```{r}
 #| label: fig-ExploratoryOne
-#| fig-cap: "Exploratory boxplot for all plant functional traits averaged across habitats per species."
+#| fig-cap: "Exploratory boxplot for all plant functional traits measured on young leaves. Values are averaged across habitats (open and forested) per species, a) leaf area, b) SLA, c) LDMC, d) dry mass, e) leaf thickness and f) plant height."
 #| fig-width: 12
 #| fig-height: 7
 #| message: false
 #| warning: false
 #| lightbox:
 #|   group: r-graph
-#|   description: This is 1 to 10 plot
+#|   description: Exploratory boxplot for all plant functional traits averaged across habitats per species.
 
-# Visualize ----
-library(ggh4x)
-library(viridis)
-library(patchwork)
 
 ## Plot  traits together, ignoring site for now, only include young leaves ----
-(Fig1 <- ggplot(data_DURIN_long %>% 
+(ggplot(data_DURIN_long %>% 
          filter(trait %in% c("Leaf area (cm^2)", "SLA (cm^2/g)", "LDMC (mg/g)",
                              "Dry mass (g)", "Leaf thickness (mm)", "Plant Height (cm)")
                  & leaf_age == "Young"), 
@@ -180,26 +233,21 @@ library(patchwork)
   theme(strip.background = element_blank(),
         ggh4x.facet.nestline = element_line(colour = "black"),
         axis.text.x = element_text(angle = 45, vjust = 1.2, hjust = 1.2)))
-
-Fig1
 ```
 
 
-![A Lovely Image](@fig-ExploratoryOne){.lightbox}
-
-
-
-See @fig-ExploratoryTwo for examples.
-
 ```{r}
 #| label: fig-ExploratoryTwo
-#| fig-cap: "Exploratory boxplots of all plant functional traits together."
+#| fig-cap: "Exploratory boxplots of all plant functional traits together with a) Site x species comparisons and b) Site x habitat comparisons."
 #| fig-subcap: 
-#|      - "a) Site x species"
-#|      - "b) Site x habitat"
+#|      - "Site x species"
+#|      - "Site x habitat"
 #| layout-nrow: 2
 #| fig-width: 12
 #| fig-height: 7
+#| lightbox:
+#|   group: r-graph
+#|   description: Exploratory boxplots of all plant functional traits together with a) Site x species comparisons and b) Site x habitat comparisons.
 
 ## Plot  traits together, with site as a grouping factor, only young leaves - Version 1 ----
 (ggplot(data_DURIN_long %>% 
@@ -250,13 +298,16 @@ See @fig-ExploratoryTwo for examples.
 
 ```{r}
 #| label: Fig-ExploratoryThree
-#| fig-cap: "Exploratory boxplots of all plant functional traits together."
+#| fig-cap: "Exploratory boxplots of all plant functional traits together, with a) Species x habitat and b) Habtiat x leaf age comparisons."
 #| fig-subcap: 
-#|      - "a) Species x habitat"
-#|      - "b) Habitat x leaf age"
+#|      - "Species x habitat"
+#|      - "Habitat x leaf age"
 #| layout-nrow: 2
 #| fig-width: 12
 #| fig-height: 7
+#| lightbox:
+#|   group: r-graph
+#|   description: Exploratory boxplots of all plant functional traits together, with a) Species x habitat and b) Habtiat x leaf age comparisons.
 
 
 # Plot  traits together, with site and leaf age as a grouping factors - Version 1 ----
@@ -305,3 +356,289 @@ See @fig-ExploratoryTwo for examples.
         ggh4x.facet.nestline = element_line(colour = "black"),
         axis.text.x = element_text(angle = 45, vjust = 0.99, hjust = 1)))
 ```
+
+
+## Analyses
+
+## Define colour palettes for outputs
+
+```{r}
+ggsave <- function(..., bg = 'white') ggplot2::ggsave(..., bg = bg)
+# Define colour palette
+Habitat <- c("Forested" = "#083508", "Open" = "#589758")
+Species <- c("Calluna vulgaris" = "#eb5461",  # berry colour option "#DF697E"
+             "Empetrum nigrum" = "#f08e51",   # berry colour option "#404040"
+             "Vaccinium myrtillus" = "#087e8b",   # berry colour option "#323284"
+             "Vaccinium vitis-idaea" = 	"#8bcfb1") # berry colour option "#D93137"
+siteID <- c("Lygra" = "#4A235A",
+            "Sogndal" = "#154360",
+            "Senja" = "#C39BD3",
+            "Kautokeino" = "#5499C7")
+```
+
+
+
+
+### Check normality of datasets
+
+```{r}
+#| label: Fig-ExploratoryHistograms
+#| fig-cap: "Exploratory histograms of all plant functional traits together, with a) Species x habitat and b) Habtiat x leaf age comparisons."
+#| fig-subcap: 
+#|      - "Species x siteID"
+#|      - "Species x siteID (log transformed)"
+#|      - "Species x siteID x habitat (natural log transformed)"
+#|      - "Habitat x species x siteID (natural log transformed)"
+#| layout-nrow: 2
+#| layout-ncol: 2
+#| fig-width: 12
+#| fig-height: 7
+#| lightbox:
+#|   group: r-graph
+#|   description: Exploratory boxplots of all plant functional traits together, with a) Species x habitat and b) Habtiat x leaf age comparisons.
+# Task: Perform variance analysis of traits
+
+# Sets a theme for the plots
+blank_theme <- theme(panel.grid.major = element_blank(), #removes major axis grid lines
+                     panel.grid.minor = element_blank(), #removes minor axis grid lines
+                     panel.background = element_blank(), #removes the default grey background
+                     legend.key = element_blank(), #removes background behind legend keys
+                     axis.line = element_line(colour = "black"), #makes axis lines black
+                     text = element_text (size = 15), #sets all text size to 20 
+                     axis.text = element_text(size = 12)) #sets axis text to size 15  
+
+
+# Use long dataset
+#plotting a histogram for each trait to determine if the data is skewed
+# TODO: Some outliers to fix
+
+(data_DURIN_long %>% 
+  ggplot(aes(x = value, fill = siteID)) +
+  geom_density(alpha = 0.2) +
+  facet_nested(species ~ trait, scales = "free", independent = "all") +
+   scale_fill_manual(values = siteID) +
+   scale_color_manual(values = siteID) +
+  labs(title = "Trait Distribution"))
+
+#log transforming traits because of skew
+data_DURIN_long_log <- data_DURIN_long %>% 
+  mutate(value = log(value))
+
+#plotting log transformed traits to confirm skew is gone
+(data_DURIN_long_log %>% 
+  ggplot(aes(x = value, fill = siteID)) +
+  geom_density(alpha = 0.2) +
+  facet_nested(species ~ trait, scales = "free", independent = "all") +
+  scale_fill_manual(values = siteID) +
+  scale_color_manual(values = siteID) +
+  labs(title = "Trait Distribution Log (natural)"))
+
+#plotting log transformed traits to confirm skew is gone
+# With habitat in as well
+(data_DURIN_long_log %>% 
+  ggplot(aes(x = value, fill = species)) +
+  geom_density(alpha = 0.2) +
+  facet_nested(siteID+habitat ~ trait, scales = "free", independent = "all") +
+  labs(title = "Trait Distribution 2.0 Log (natural)") +
+  scale_fill_manual(values = Species) +
+  scale_color_manual(values = Species) +
+  theme_minimal())
+
+#plotting log transformed traits to confirm skew is gone
+# With habitat in as well
+(data_DURIN_long_log %>% 
+  ggplot(aes(x = value, fill = habitat)) +
+  geom_density(alpha = 0.2) +
+  facet_nested(species*siteID ~ trait, scales = "free", independent = "none") +
+  labs(title = "Trait Distribution 3.0 Log (natural)") +
+  scale_fill_manual(values = Habitat) +
+  scale_color_manual(values = Habitat) +
+  theme_minimal())
+
+```
+
+## Variance Partitioning
+
+To understand the relative variation in trait expression between species, sites, habitats, individuals, we run a variance partitioning excercise. 
+
+```{r}
+
+#| label: Fig-VarPart1
+#| fig-cap: "Variance partitioning plot for a) plant height and b) leaf traits. Also presented is c) a combined plot for height and leaf traits."
+#| fig-subcap: 
+#|      - "Species x siteID"
+#|      - "Species x siteID (log transformed)"
+#|      - "Species x siteID x habitat (natural log transformed)"
+#| fig-width: 1209
+#| fig-height: 680
+#| layout: [[45,-10, 45], [100]]
+#| lightbox:
+#|   group: r-graph
+#|   description: Exploratory boxplots of all plant functional traits together, with a) Species x habitat and b) Habtiat x leaf age comparisons.
+#|   
+#### Model Structure 2 - species/siteID/habitat/plant_nr ####
+# Here, we have leaves as the final level along with unexplained variation.
+
+
+output2 <- data.frame(NULL)
+for(i in unique(data_DURIN_long_log$trait)){
+  #This code all comes from Julie Messier's web site
+  mod2<-lmer(value~1+(1|species/siteID/habitat/plant_nr), 
+            data=data_DURIN_long_log %>% filter(trait == i), 
+            na.action=na.omit)
+  variances2<-c(unlist(lapply(VarCorr(mod2),diag)), 
+               attr(VarCorr(mod2),"sc")^2) #get variances
+  
+  var.comp2<-variances2/sum(variances2)
+  
+  var.comp2<-as.data.frame(var.comp2) #creates a dataframe from the values
+  var.comp2<-cbind(rownames(var.comp2),data.frame(var.comp2,row.names=NULL)) #changes row names into a column
+  var.comp2<-melt(var.comp2,value.name="value") #makes var.comp into a variable
+  names(var.comp2)[1]<-"Scale" #changes the first column name to "scale"
+  
+  var.comp2$value<-var.comp2$value *100 #changes values into % 
+  
+  var.comp2<- var.comp2 %>%
+    mutate(Scale = plyr::mapvalues(Scale, from = c(""), to = c("Within Individual and Unexplained"))) %>% 
+    mutate(Scale = factor(Scale, levels = c("Within Individual and Unexplained","plant_nr:(habitat:(siteID:species)).(Intercept)","habitat:(siteID:species).(Intercept)","siteID:species.(Intercept)","species.(Intercept)"))) %>% 
+    # group_by(variable)%>%
+    arrange(variable, Scale)%>%
+    mutate(labypos=100-(cumsum(value)-0.5*value)) %>%
+    #subset(value>1) %>% #this line removes variance partitioning less than 1% so that there are no zero labels
+    mutate(trait = i)
+  
+  output2 <- bind_rows(output2, var.comp2)
+} 
+
+# We don't want plant height, as it's only recorded to individual level not within individual level
+# Remove height rows
+DURIN_VarPart_Leaves <- output2 %>% 
+  filter(trait != "Plant Height (cm)")
+
+
+
+#Colour palette for graph: https://paletton.com/#uid=54n140kjJo3hfJliyuOl7gxlT9k
+#Colour palette is in low saturation 
+#Variance Partitioning Plot 2 
+VP_legend_title <- "Leaf Traits: Ecological Scales"
+VP_Plot2<-ggplot(DURIN_VarPart_Leaves, 
+                 aes(x=trait, y=value))+
+  geom_col(aes(fill=Scale))+
+  geom_text(aes(y=labypos, label=round(value,digits = 1)),colour="white", size = 5)+
+  scale_fill_manual (VP_legend_title, values = c("#86b4ce","#4F93B8","#306489","#222B4C","#AD8CAE"),
+                    #values = c("#77293e","#ae435f","#f27092","#543a83","#37245a"),
+                     labels = c("Within individual + Unexplained",
+                                "Between individuals within habitat/site/species",
+                                "Between habitats within sites within species",
+                                "Between sites within species",
+                                "Between species"))+
+  ylab("Proportion of Variance (%)")+
+  xlab("Log (natural) Transformed Traits")+
+  blank_theme+
+  coord_flip() +
+  labs(fill = "Leaf Traits: Ecological Scale")+
+  scale_y_continuous(expand=c(0,0),limits=c(0,100.1))+#this forces the graph to actually start at 0% and end at 100%
+  scale_x_discrete(limits = c("Leaf area (cm^2)", "Dry mass (g)", "SLA (cm^2/g)",
+                              "LDMC (mg/g)", "Wet mass (g)")) +
+  theme(axis.text.x = element_text(angle = 300, hjust = 0))
+VP_Plot2
+
+
+# Model without within individual variation
+output3 <- data.frame(NULL)
+for(i in unique(data_DURIN_long_log$trait)){
+  #This code all comes from Julie Messier's web site
+  mod3<-lmer(value~1+(1|species/siteID/habitat), 
+            data=data_DURIN_long_log %>% filter(trait == i), 
+            na.action=na.omit)
+  variances3<-c(unlist(lapply(VarCorr(mod3),diag)), 
+               attr(VarCorr(mod3),"sc")^2) #get variances
+  
+  var.comp3<-variances3/sum(variances3)
+  
+  var.comp3<-as.data.frame(var.comp3) #creates a dataframe from the values
+  var.comp3<-cbind(rownames(var.comp3),data.frame(var.comp3,row.names=NULL)) #changes row names into a column
+  var.comp3<-melt(var.comp3,value.name="value") #makes var.comp into a variable
+  names(var.comp3)[1]<-"Scale" #changes the first column name to "scale"
+  
+  var.comp3$value<-var.comp3$value *100 #changes values into % 
+  
+  var.comp3<- var.comp3 %>%
+    mutate(Scale = plyr::mapvalues(Scale, from = c(""), to = c("Between Individuals and Unexplained"))) %>% 
+    mutate(Scale = factor(Scale, levels = c("Between Individuals and Unexplained","habitat:(siteID:species).(Intercept)","siteID:species.(Intercept)","species.(Intercept)"))) %>% 
+    # group_by(variable)%>%
+    arrange(variable, Scale)%>%
+    mutate(labypos=100-(cumsum(value)-0.5*value)) %>%
+    #subset(value>1) %>% #this line removes variance partitioning less than 1% so that there are no zero labels
+    mutate(trait = i)
+  
+  output3 <- bind_rows(output3, var.comp3)
+} 
+
+
+
+#Colour palette for graph: https://paletton.com/#uid=54n140kjJo3hfJliyuOl7gxlT9k
+#Colour palette is in low saturation 
+#Variance Partitioning Plot 3 
+
+# We don't want plant height, as it's only recorded to individual level not within individual level
+# Remove height rows
+DURIN_VarPart_Height <- output3 %>% 
+  filter(trait == "Plant Height (cm)")
+
+
+VP_legend_title <- "Plant Height: Ecological Scales"
+VP_Plot3<-ggplot(DURIN_VarPart_Height, 
+                 aes(x=trait, y=value))+
+  geom_col(aes(fill=Scale))+
+  geom_text(aes(y=labypos, label=round(value,digits = 1)),colour="white", size = 5)+
+  scale_fill_manual (VP_legend_title, values = c("#86b4ce","#306489","#222B4C","#AD8CAE"),
+                     labels = c("Between individuals + Unexplained",
+                                "Between habitats within sites within species",
+                                "Between sites within species",
+                                "Between species"))+
+  ylab("Proportion of Variance (%)")+
+  xlab("Log (natural) Transformed Traits")+
+  blank_theme+
+  coord_flip() +
+  labs(fill = "Plant Height: Ecological Scale")+
+  scale_y_continuous(expand=c(0,0),limits=c(0,100.1))+#this forces the graph to actually start at 0% and end at 100%
+  scale_x_discrete(limits = c("Plant Height (cm)")) +
+  theme(axis.text.x = element_text(angle = 300, hjust = 0))
+VP_Plot3
+
+
+# Plot side by side
+(VP_DURIN_Combined <- ggarrange(VP_Plot2
+                     , VP_Plot3 + rremove("ylab"),
+                     ncol = 1, nrow = 2,
+          legend = "bottom", labels = c("A", "B"),
+          common.legend = FALSE))
+
+#combining plots
+
+VP_Plot2.legend<- get_legend(VP_Plot2)  #gets the legend from each plot
+VP_Plot3.legend<- get_legend(VP_Plot3)
+
+temp.plots<- plot_grid(VP_Plot2 + theme(legend.position = "none"),
+                       VP_Plot3 + theme(legend.position = "none") + xlab(NULL),
+                       ncol=1, 
+                       align = 'hv',
+                       rel_heights = c(1,0.3),
+                       rel_widths = c(1,1))
+
+temp.legend<-plot_grid(VP_Plot2.legend,
+                       VP_Plot3.legend,
+                       align = 'hv',
+                       rel_heights = c(0.5,1),
+                       nrow = 2)
+plot_grid(temp.plots,
+          temp.legend,
+          rel_widths =  c(1,0.5),
+          ncol = 2)
+
+# ggsave ("VP.jpeg",
+#         width = 6.5, height=5, units = "in",
+#         dpi = 800)
+```
+
