@@ -1,29 +1,48 @@
 ---
-title: "DURIN Hydraulics Data Cleaning"
+title: "Testing LightBox For Figures"
 format: html
-editor: visual
-author: "Sonya Geange"
-date: "20/07/2023"
-
+lightbox: auto
 ---
 
-## Quarto
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+## With computation code chunks
 
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+Options for lightbox can be passed using chunk options.
 
 ```{r}
-1 + 1
+#| fig-cap: Simple demo R plot 
+#| lightbox:
+#|   group: r-graph
+#|   description: This is 1 to 10 plot
+plot(1:10, rnorm(10))
 ```
-
-You can add options to executable code like this
 
 ```{r}
-#| echo: false
-2 * 2
+#| fig-cap: Plot about cars data
+#| lightbox:
+#|   group: r-graph
+#|   description: We see our cars data above
+plot(cars)
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+It is possible to create several plots, and group them in a lightbox gallery. Use list in YAML for options when you have several plots, on per plot.
+```{r}
+#| fig-cap: 
+#|   - Caption for first plot
+#|   - Caption for second plot
+#| lightbox: 
+#|   group: cars
+#|   description: 
+#|     - This is the decription for first graph
+#|     - This is the decription for second graph
+plot(mtcars)
+plot(cars)
+```
+
+When `lightbox: auto` in main YAML config, you can opt-out lightbox on a plot by setting `lightbox: false`
+
+```{r}
+#| fig-cap: mtcars
+#| lightbox: false
+plot(mtcars)
+```
