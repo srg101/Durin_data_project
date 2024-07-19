@@ -1,0 +1,71 @@
+# title: "DURIN Leaf Area Calculations 2024"
+# author: "Sonya R. Geange"
+# output: html_notebook
+
+
+### CALCULATE LEAF AREA ###
+
+#### LOAD LIBRARY
+# devtools::install_github("richardjtelford/LeafArea")
+library(LeafArea)
+library(plyr)
+library(dplyr)
+
+
+#### Function to calculate leaf area
+loop.files <-  function(files){
+
+  file.copy(files, new.folder)
+  if(grepl("-NA$", files)){
+    newfile <- basename(files)
+    file.rename(paste0(new.folder, "/", newfile), paste0(new.folder,
+                                                         "/", gsub("-NA$", "", newfile)))
+  }
+  print(files)
+  # Change the file path to your local directory for ImageJ
+  area <- try(run.ij(path.imagej = "C:/Users/geang/OneDrive/Documents/ImageJ/ImageJ", set.directory = new.folder, distance.pixel = 237, known.distance = 2, log = TRUE, low.size = 0.005, trim.pixel = 60, trim.pixel2 = 150, save.image = TRUE))
+  if(inherits(area, "try-error")){
+    return(data.frame(LeafArea = NA))
+  }
+  file.copy(dir(new.folder, full.names = TRUE, pattern = "\\.tif"), output.folder)
+  Sys.sleep(0.1)
+  if(any(!file.remove(dir(new.folder, full.names = TRUE) ))) stop()
+  res <- data.frame(ID = names(unlist(area[[2]])), LeafArea = (unlist(area[[2]])))
+  return(res)
+}
+
+
+# If required
+# test run.ij on a subfolder (change directories if required)
+run.ij(path.imagej = "C:/Users/geang/OneDrive/Documents/ImageJ/ImageJ", set.directory = "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Tjotta Leaf Scans/2023.07.06 C3PO/", distance.pixel = 237, known.distance = 2, log = TRUE, low.size = 0.05, trim.pixel = 58, trim.pixel2 = 150, save.image = TRUE)
+
+
+
+###########################################################################
+#### Calculate leaf area for 2024 DURIN and DroughtNet Collected data
+# Make a list of files, temporary folder and output folder
+# Be sure to adjust the file path directory if required
+# These need to be downloaded from the OSF account.
+# Note, each site has a folder and several subfolders.
+# Because of how often errors occur, run each folder seperately
+# Some images also required editing, i.e. painting overlapping leaves etc.
+# A default address could be 'raw_data/leaf_scans/DURIN_leaf_scans/
+
+# Change directories
+list.of.files <- dir(path = paste0("C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited"), pattern = "jpeg|jpg", recursive = TRUE, full.names = TRUE)
+new.folder <- "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited/Temp" # "raw_data/Temp/"
+output.folder <- "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited/output/" # raw_data/output
+
+# Run function
+LeafArea.raw_total <- plyr::ldply(list.of.files, loop.files)
+
+# calculate sums
+leaf_area <- LeafArea.raw_total |>
+  mutate(ID = substr(ID, 1, 7)) |>
+  group_by(ID) |>
+  dplyr::summarise(n = n(),
+                   leaf_area = sum(LeafArea))
+
+# save data as csv, change directories
+dim(LeafArea.raw)
+write.csv(leaf_area, file = "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited/output/Edited_leaf_area_2023_09_07.csv")
