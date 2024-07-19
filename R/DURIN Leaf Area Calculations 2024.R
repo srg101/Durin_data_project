@@ -6,7 +6,7 @@
 ### CALCULATE LEAF AREA ###
 
 #### LOAD LIBRARY
-# devtools::install_github("richardjtelford/LeafArea")
+devtools::install_github("richardjtelford/LeafArea")
 library(LeafArea)
 library(plyr)
 library(dplyr)
@@ -23,7 +23,18 @@ loop.files <-  function(files){
   }
   print(files)
   # Change the file path to your local directory for ImageJ
-  area <- try(run.ij(path.imagej = "C:/Users/geang/OneDrive/Documents/ImageJ/ImageJ", set.directory = new.folder, distance.pixel = 237, known.distance = 2, log = TRUE, low.size = 0.005, trim.pixel = 60, trim.pixel2 = 150, save.image = TRUE))
+  area <- try(run.ij(path.imagej = "C:/Users/sge010/OneDrive - University of Bergen/Documents/ImageJ",
+                     set.directory = new.folder,
+                     distance.pixel = 237, known.distance = 2,
+                     log = TRUE,
+                     # Pick a minimum size threshold (removes dust spects etc.)
+                     low.size = 0.005,
+                     # Trim areas on the sides which represent rulers etc.
+                     # Trim pixel is all-round trimming of image
+                     # Trim pixel right is for the rulers normally
+                     # Trim pixel top removes the envelope and blue tap on scanner
+                     trim.pixel = 60, trim.pixel.right = 150, trim.pixel.top = 1500,
+                     save.image = TRUE))
   if(inherits(area, "try-error")){
     return(data.frame(LeafArea = NA))
   }
@@ -37,7 +48,18 @@ loop.files <-  function(files){
 
 # If required
 # test run.ij on a subfolder (change directories if required)
-run.ij(path.imagej = "C:/Users/geang/OneDrive/Documents/ImageJ/ImageJ", set.directory = "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Tjotta Leaf Scans/2023.07.06 C3PO/", distance.pixel = 237, known.distance = 2, log = TRUE, low.size = 0.05, trim.pixel = 58, trim.pixel2 = 150, save.image = TRUE)
+run.ij(path.imagej = "C:/Users/sge010/OneDrive - University of Bergen/Documents/ImageJ",
+       set.directory = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/data/raw_data/Leaf_Scans",
+       distance.pixel = 237, known.distance = 2,
+       log = TRUE,
+       # Pick a minimum size threshold (removes dust spects etc.)
+       low.size = 0.005,
+       # Trim areas on the sides which represent rulers etc.
+       # Trim pixel is all-round trimming of image
+       # Trim pixel right is for the rulers normally
+       # Trim pixel top removes the envelope and blue tap on scanner
+       trim.pixel = 60, trim.pixel.right = 150, trim.pixel.top = 1500,
+       save.image = TRUE)
 
 
 
@@ -47,25 +69,29 @@ run.ij(path.imagej = "C:/Users/geang/OneDrive/Documents/ImageJ/ImageJ", set.dire
 # Be sure to adjust the file path directory if required
 # These need to be downloaded from the OSF account.
 # Note, each site has a folder and several subfolders.
-# Because of how often errors occur, run each folder seperately
+# TOP TIP: Because of how often errors occur, run each folder seperately, i.e. by dates, or sites.
 # Some images also required editing, i.e. painting overlapping leaves etc.
 # A default address could be 'raw_data/leaf_scans/DURIN_leaf_scans/
 
 # Change directories
-list.of.files <- dir(path = paste0("C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited"), pattern = "jpeg|jpg", recursive = TRUE, full.names = TRUE)
-new.folder <- "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited/Temp" # "raw_data/Temp/"
-output.folder <- "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited/output/" # raw_data/output
+# List of the image files we want to bring in
+list.of.files <- dir(path = paste0("C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/data/raw_data/Leaf_Scans"), pattern = "jpeg|jpg", recursive = TRUE, full.names = TRUE)
+# A new folder (temporary as the script runs, files aren't left here at the end of the process)
+# And an output folder for the final thresholded images.
+# If these don't run via script, then just create them manually..
+new.folder <- "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/data/raw_data/Leaf_Scans/Temp" # "raw_data/Temp/"
+output.folder <- "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/data/raw_data/Leaf_Scans/output/" # raw_data/output
 
 # Run function
 LeafArea.raw_total <- plyr::ldply(list.of.files, loop.files)
 
-# calculate sums
+# Calculate Area Sums
 leaf_area <- LeafArea.raw_total |>
   mutate(ID = substr(ID, 1, 7)) |>
   group_by(ID) |>
   dplyr::summarise(n = n(),
                    leaf_area = sum(LeafArea))
 
-# save data as csv, change directories
+# Save data as csv, change directories
 dim(LeafArea.raw)
-write.csv(leaf_area, file = "C:/Users/geang/OneDrive/Documents/UiB/DURIN/Data/Plant Functional Traits/Edited Scans/Edited/output/Edited_leaf_area_2023_09_07.csv")
+write.csv(leaf_area, file = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/data/raw_data/Leaf_Scans/output/DURIN_Calculated_Leaf_Area_2024_07_19.csv")
