@@ -1,0 +1,108 @@
+---
+title: "DURIN Thermal Tolerance Manuscript"
+author: "Sonya R. Geange"
+format: 
+  html:
+    self-contained: true
+execute:
+  echo: false
+editor:
+  markdown:
+    wrap: sentence
+---
+
+```{r}
+#| label: set-up
+#| echo: false
+#| message: false
+
+# Load required packages and libraries
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(broom)
+# library(gt)
+library(lme4)
+library(lmerTest)
+library(broom.mixed)
+
+```
+
+# Title:
+
+# Authors:
+
+# Abstract
+
+# Keywords
+
+chlorophyll fluorescence, thermal load sensitivities,
+
+# Introduction
+
+\[Climate change in high-latitude ecosystems\]
+
+\[Temperature Extremes\]
+
+\[Dwarf-shrubs as a dominant plant functional type\]
+
+# Methods
+
+## Study design (sites, species, experiment)
+
+| Site       | Biography  | Oceanity | GPS | Elevation | MAT (°C) | MAP (mm) |
+|------------|------------|----------|-----|-----------|----------|----------|
+| Lygra      | Boreal     | Coast    |     |           |          |          |
+| Sogndal    | Boreal     | Inland   |     |           |          |          |
+| Senja      | Sub-arctic | Coast    |     |           |          |          |
+| Kautokeino | Sub-arctic | Inland   |     |           |          |          |
+
+## Field Sampling
+
+At each site and habitat, representative individuals from the four focal species were chosen for leaf-sampling.
+Individuals were representative of the community (i.e. average height) and the current season leaves were fully-expanded and un-damagedndefined (Perez-...., 2016).
+For *Calluna vulgaris*, strong seasonal signals in developmental status meant that samples taken from Lygra in June 2024, were not as mature as those from sites sampled later in the season.
+Therefore, the most mature leaflets were sampled across the sites/habitats.
+
+## Thermal Tolerance Assays and Plant Functional Traits
+
+### Plant Functional Traits
+
+At each site and habitat, we collected leaf samples from each of the four focal species for use in the thermal tolerance assays.
+Individuals were chosen to be representative of the local community in terms of size (height, canopy dimensions) and niche occupation (e.g. avoiding moist depressions, or rocky outcrops).
+Vegetative height was measured for individuals, before leaves were sample for traits and thermal tolerance.
+Leaves were fully-expanded (relative to the season) and not damaged.
+Where possible eight leaves were sampled for hot tolerance assays, and paired with six leaves for cold tolerance assays (total of 14 leaves).
+
+In cases where individuals were not sufficiently large enough to provide either eight or sixteen leaves, multiple individuals from close proximity (\<10cm) were sampled collectively.
+For the small-leaved species *Calluna vulgaris* and *Empentrum nigrum* the true-leaves were too small to be measured individually for Fv/Fm or plant functional traits, and therefore aggregates of leaves were used (often 5-6 leaves).
+For *Calluna vulgaris*, leaves were defined as being xxxx (this was variable due to the fluctuating time within the growing season in which field-work was conducted).
+Sampled individuals (leaves or whole plant) were stored in zip-lock bags with damp paper towels to maintain humidity during transport from the field to the lab, and kept in cool conditions (\~ 4 °C).
+
+For each sample (entire leaf, or aggregated leaves), wet mass was measured (0.001g accuracy), leaf area was calculated by scanning the the total single sided surface area using a flatbed scanner and a semi-automated protocol
+
+### Hot tolerance assays
+
+Leaves were exposed to eight temperature treatments: a control temperature of 20 °C, along with 30 °C, 34 °C, 38 °C, 42 °C, 46 °C, 50 °C, and 54 °C.
+Temperature treatments consisted of 15l plastic storage tubs filled with 10l of water, which was temperature controlled using Steba SV80 sous vide cookers.
+Temperature baths were manually controlled, and temperatures were stablized for 20 minutes before the experiment began.
+Storage containers were insulated from ambient light conditions, and LED grow lamps were positioned above the baths to provide light expsoure during the heat treatment periods (Add details).
+
+All leaves were placed in the control bath for 20 minutes prior to leaves being distributed to the different temperature treatments for a further 20 minutes, before returning to the control bath for a 90 minute recovery period, post-stress.
+After removal from the post-stress bath, samples were dark-adapted for 24hrs before chlorophyll fluorescence measures were taken.
+
+For Fv/Fm measurements, the dark adapted leaf samples were placed within FluorPen dark adaptation clips for 20 minutes, before Qy (Fv/Fm proxy) was measured using a FluorPen 110D (Photon Systems Instruments).
+Samples were then oven-dried at 65 °C for 72hrs, before being weighed for dry mass.
+
+## Data Analysis
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
