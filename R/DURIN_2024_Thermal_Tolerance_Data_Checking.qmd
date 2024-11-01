@@ -75,7 +75,7 @@ check <- function(barcode) {
 }
 ```
 
-## Data Checking
+## Data CheckingDURIN_data
 
 ```{r}
 ## Find duplicate barcodes ----
@@ -93,6 +93,99 @@ error.oldVM <- DURIN_data |>
   filter(species %in% c("Vaccinium myrtillus")) |>
   # Filter to mislabelled leaf ages
   filter(leaf_age == "old")
+
+
+## Leaf Types vs Temperatures ----
+# For hot runs
+# Leaf 1 = 20C, Leaf 2 = 30C, Leaf 3 = 34C, Leaf 4 = 38C,
+# Leaf 5 = 42C, Leaf 6 = 46C, Leaf 7 = 50C, Leaf 8 = 54C
+
+# For cold runs
+# Leaf 9 = 5C, Leaf 10 = 0C, Leaf 11 = -5C, Leaf 12 = -10C,
+# Leaf 13 = -15C, Leaf 14 = -20C
+error.leafNum.leafTemp <- DURIN_data %>% 
+  # Table leaf number by treatment temperatures
+  # Can remove siteID, species, habitat for the more general overview
+  group_by(proj_2024, siteID, species, habitat, leaf_nr, TempExp, TempExpTime) %>% 
+  tally()
+
+## FvFm Recovery Times for Hot and Cold Runs ----
+# For hot runs: general recovery time should be 24hrs, with some 18hr exceptions
+# For cold runs: general recovery time is 48hrs
+
+error.TempExpTime <- DURIN_data %>% 
+  # Table leaf number by treatment temperatures
+  # Can remove siteID, species, habitat for the more general overview
+  group_by(proj_2024, TempExpTime) %>% 
+  tally()
+
+## Single vs Bulk Sampled Leaves ----
+# For VV and VM they should be single leaf samples
+# For CV and EN they should be bulked leaves, however, the numbers are variable. But all Calluna and Empentrum with bulked leaf samples should have a bulk leaf number provided. Later will check how envelope bulk number aligns with the leaf area scanned counts. 
+
+# There appears to be quite a lot of variation across the samples.
+# The VV and VM could be controlled for with code, assigning a bulk leaf nr sample of 1 for each of these. All CV and EN should be assigned bulk not leaf_nr, as we never would have only sampled an individual leaf (minimum weight thresholds meant often 4-5 leaves, if not more would have been required)
+
+error.SingleBulkedLeaves <- DURIN_data %>% 
+  # Table leaf number by treatment temperatures
+  # Can remove siteID, species, habitat for the more general overview
+  group_by(species, sample, bulk_nr_leaves) %>% 
+  tally()
+
+## Single vs Multiple Individuals ----
+# We often had issues where a single plant was unable to contribute the 14-20 leaves required to go across multiple projects, i.e. hot, cold, hot rapid, and stomatal peels. Therefore, multiple individuals within close proximity were harvested together, and assigned as a single 'plant'. In these instance, multiple plant height measurements were taken and seperated by ' / ' format.
+
+# Split heights into multiple columns, one per measurement
+# Currently there is a maximum of 8 individuals, so 8 new columns could be created
+DURIN_data <- DURIN_data %>% 
+  separate_wider_delim(heights, delim = " / ",
+                       names = c("Height_1", "Height_2", "Height_3", "Height_4",
+                                 "Height_5", "Height_6", "Height_7", "Height_8"),
+                       too_few = "align_start",
+                       cols_remove = FALSE) %>%
+  mutate_at(c('Height_1','Height_2', 'Height_3', 'Height_4',
+              'Height_5', 'Height_6', 'Height_7', 'Height_8'), as.numeric)
+
+# Add a new column for the mean height of the individuals representing a single plant
+DURIN_data <- DURIN_data %>% 
+mutate(Height_mean = rowMeans(cbind(Height_1, Height_2, Height_3, Height_4,
+                                    Height_5, Height_6, Height_7, Height_8),
+                              na.rm = TRUE))
+
+
+# During processing, if all leaves did manage to be taken off a single individual, even though multiple were collected, then 'individual' should be flagged so that if we wanted we could use the samples for genetics etc later on.
+
+# Conversely, a sampled plant with only one individual, shouldn't have multiple heights associated with it, or the option 'multiple' for sample type.
+
+error.SingleMultiple <- DURIN_data %>% 
+  # Table leaf number by treatment temperatures
+  # Can remove siteID, species, habitat for the more general overview
+  group_by(proj_2024, TempExpTime) %>% 
+  tally()
+
+DURIN_data <- DURIN_data %>% 
+  rowwise() %>% 
+  mutate(count = sum(!is.na(c_across(Height_1:Height_8))),
+         SingleIndividual_Check = case_when(count >= 2 ~ "Multiple",
+                            count == 1 ~ "Individual",
+                            count == 0 ~ "None",
+                            T ~ as.character(count))) %>% 
+  select(-count)
+
+DURIN_data <- DURIN_data %>% 
+mutate(
+    count = rowSums(across(Height_1:Height_8) ~ !is.na(.x)),
+    SingleIndividual_Check = case_when(count >= 2 ~ "2 or more",
+                       count == 1 ~ "Individual",
+                       count == 0 ~ "None",
+                       T ~ as.character(count))) %>% 
+  select(-count)
+
+
+## Are the FvFm values within range? ----
+
+
+
 
 ## DURIN plot info ----
 ### Does the envelope site match the plot site? ----
@@ -326,6 +419,7 @@ DURIN_TT %>%
               se = FALSE, aes(group = PlantSampleID, color = habitat)) +
   facet_grid(species ~ siteID)
 
+
 # Cold Tolerance
 
 # Plot Initial Curves
@@ -466,4 +560,7 @@ psiiht(Temperature = DURIN_TT_HOT$TempExp,
        id = DURIN_TT_HOT$PlantSampleID,
        plot.est = T,
        boots = 5)
+```
+
+```{}
 ```
