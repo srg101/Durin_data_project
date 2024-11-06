@@ -1,0 +1,942 @@
+---
+title: "DURIN TOMST Microclimate Data"
+format: html
+editor: visual
+author: "Sonya R. Geange"
+date: today
+---
+
+## Importing and filtering data
+
+Installing and loading all the packages required to run the code
+
+```{r install packages}
+
+#install.packages("tidyverse")
+#install.packages("lubridate")
+#install.packages("dataDownloader")
+#install.packages("purrrlyr")
+#install.packages("readxl")
+#install.packages("fs")
+#install.packages("purrr")
+#install.packages("readr")
+#install.packages("ggplot2")
+#install.packages("lme4")
+#install.packages("stargazer")
+#install.packages("myClim")
+```
+
+Load all the packages needed
+
+```{r load_packages}
+
+library(tidyverse)
+library(lubridate)
+# library(dataDownloader)
+library(purrrlyr)
+library(readxl)
+library(readr)
+library(tidyverse)
+library(fs)
+library(purrr)
+library(readr)
+library(ggplot2)
+library(lme4)
+library(stargazer)
+library(emmeans)
+library(see)
+library(svglite)
+library(officer)
+library(lmerTest)
+library(officer)
+library(myClim)
+library(cowplot)
+library(ggpubr)
+```
+
+### Importing metadata from the TOMST loggers files
+
+```{r data import}
+metadata <- read_delim("C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/data/raw_data/TOMST_Logger/DURIN_TOSMT_2024_metadata.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE, col_names=TRUE, col_types=c("c","c","n","c","c","c","c","c","n","n","D","D"))
+
+# Seems some extra rows and columns are brought in, remove these
+metadata <- metadata[1:190, 1:13]
+
+# Find the "loggerID" and "plotID" columns
+loggerIDColumn <- which(names(metadata) == "loggerID")
+plotIDColumn <- which(names(metadata) == "plotID")
+
+# Sort data in ascending order according to the "loggerID" column
+metadata <- metadata |> 
+  arrange(metadata[, loggerIDColumn])
+
+# List files in folder
+folder_path <- "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/data/raw_data/TOMST_Logger/TOMST_microclimate_loggers/Loggers_All/"
+#SO/Sogndal_31.05.2024"      
+
+
+# List files in folder
+file_list <- list.files(folder_path)
+
+# Create a data frame to store file paths, localities and data formats
+path_data <- data.frame(
+  path = file.path(folder_path, file_list),
+  
+  loggerID  = as.integer(substr(file_list, 6, 13)), # Extract digits from file name
+  data_format = "TOMST" # Set data format as "TOMST"
+  )
+
+# Create a data frame to store only useful data
+active_metadata <- data.frame(loggerID = path_data$loggerID) |> 
+   left_join(metadata, by = join_by(loggerID)) 
+path_data <- path_data |> 
+   mutate(locality_id = as.character(active_metadata$loggerID)) |> 
+   mutate(serial_number = as.character(active_metadata$loggerID)) |> 
+            select(path,locality_id,data_format,serial_number) # put column in the right order
+
+
+localities_data <- data.frame(
+    locality_id = as.character(active_metadata$loggerID),
+    plot_id = active_metadata$plotID,
+    site = active_metadata$site,
+    habitat = active_metadata$land_type )
+  
+# Write data to a csv file
+#write_csv(path_data, "chemin_vers_votre_dossier/Path.xlsx", row.names = FALSE)
+#write_csv(localities_data, "chemin_vers_votre_dossier/Localities.xlsx", row.names = FALSE)
+
+```
+
+### Importing all the data
+
+```{r}
+tms <- mc_read_data(files_table = path_data,
+                      localities_table = localities_data,
+                      silent = TRUE, clean = TRUE)
+
+#tms.verif <- tms |> 
+#  mc_reshape_long()
+
+#> Warning in mc_prep_clean(tms.m, silent = T): MyClim object is already cleaned.
+#> Repeated cleaning overwrite cleaning informations.
+tms.info1 <- mc_info_clean(tms) # call cleaning log
+
+tms <- mc_join(tms)
+tms.info2 <- mc_info_clean(tms)
+
+```
+
+### Cropping with myClim package and vector
+
+```{r}
+
+# Start and end are list 
+#start <-  as.POSIXct(as.Date(active_metadata$date_in, format = "%d/%m/%Y"), tz = "UTC")
+start_t <- as.POSIXct(as.Date("01/08/2023", format = "%d/%m/%Y"), tz = "UTC")
+# we choose this date to have the same data for all TMS loggers
+end_t <- as.POSIXct(as.Date("15/06/2024", format = "%d/%m/%Y"), tz = "UTC")
+#end <- as.POSIXct(as.Date(active_metadata$date_collect, format = "%d/%m/%Y"), tz = "UTC")
+localities = as.vector(names(tms$localities))
+
+
+tms <- mc_prep_crop(tms, start = start_t, end = NULL, localities)
+tms.info <- mc_info_clean(tms)
+
+
+
+```
+
+## Data extraction
+
+## ALL
+
+```{r calculation for all the sites}
+
+## calculate virtual sensor VWC from raw TMS moisture signal
+tms.all.calc <- mc_calc_vwc(tms, soiltype = "universal") #reseach on soiltype and TOMST VERSION
+
+## virtual sensor with growing and freezing degree days
+tms.all.calc <- mc_calc_gdd(tms.all.calc, sensor = "TMS_T3",)
+tms.all.calc <- mc_calc_fdd(tms.all.calc, sensor = "TMS_T3")
+
+## virtual sensor to estimate snow presence from 2 cm air temperature 
+tms.all.calc <- mc_calc_snow(tms.all.calc, sensor = "TMS_T2")
+
+## summary data.frame of snow estimation
+tms.snow <- tms.all.calc |> 
+  mc_calc_snow_agg() 
+tms.snow$locality_id = as.numeric(tms.snow$locality_id)
+tms.snow <- active_metadata |> 
+  select("locality_id" = loggerID , "siteID" = site,"habitat" = land_type) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  left_join(tms.snow) |> 
+  group_by(siteID, habitat) |> 
+  summarise(mean_snow_days = mean(snow_days),
+            first_day = mean.Date(first_day, na.rm = TRUE),
+            last_day = mean.Date(last_day, na.rm = TRUE))
+ 
+temp_env_all  <-tms |> 
+  mc_env_temp(period = "week", min_coverage = 0.9) |> 
+  filter(value >= -30 & value <= 50)
+
+moist_env_all <- mc_env_moist(tms.all.calc, period = "week", min_coverage = 0.9)
+snow_all <- tms.all.calc |> 
+    mc_reshape_long() |> 
+  filter(sensor_name == "snow")
+
+```
+
+Plot comparison
+
+```{r}
+active_metadata$site <- factor(active_metadata$site, levels = c("Senja", "Kautokeino", "Lygra","Sogndal"))
+
+temp.soil.mean.all <- temp_env_all |> 
+  filter(sensor_name == "T.soil_8_cm.mean") |> #T.air_15_cm.mean
+    select("loggerID" = locality_id, sensor_name, datetime, "temp_mean_soil" = value) 
+temp.soil.mean.all$loggerID = as.numeric(temp.soil.mean.all$loggerID)
+
+
+temp.soil.mean.all <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(temp.soil.mean.all) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, datetime) |>
+  #group_by(site, datetime) |>
+  summarise(mean.temp.soil = mean(temp_mean_soil, na.rm = TRUE)) |>  
+  ungroup()
+
+temp.soil.mean.all.hab <- temp_env_all |> 
+  filter(sensor_name == "T.soil_8_cm.mean") |> #T.air_15_cm.mean
+    select("loggerID" = locality_id, sensor_name, datetime, "temp_mean_soil" = value) 
+temp.soil.mean.all.hab$loggerID = as.numeric(temp.soil.mean.all.hab$loggerID)
+
+temp.soil.mean.all.hab <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(temp.soil.mean.all.hab) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, habitat, datetime) |>
+  #group_by(site, datetime) |>
+  summarise(mean.temp.soil.hab = mean(temp_mean_soil, na.rm = TRUE)) |>  
+  ungroup()
+  # mutate(mean.temp.hab = replace(mean.temp.hab, is.nan(mean.temp.hab), -10)) 
+
+
+
+temp.mean.all <- temp_env_all |> 
+  filter(sensor_name == "T.air_15_cm.mean") |> 
+    select("loggerID" = locality_id, sensor_name, datetime, "temp_mean_air" = value) 
+temp.mean.all$loggerID = as.numeric(temp.mean.all$loggerID)
+
+temp.mean.all <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(temp.mean.all) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, datetime) |>
+  #group_by(site, datetime) |>
+  summarise(mean.temp.air = mean(temp_mean_air, na.rm = TRUE)) |>  
+  ungroup()
+
+temp.mean.all.hab <- temp_env_all |> 
+  filter(sensor_name == "T.air_15_cm.mean") |> #T.air_15_cm.mean
+    select("loggerID" = locality_id, sensor_name, datetime, "temp_mean_air" = value) 
+temp.mean.all.hab$loggerID = as.numeric(temp.mean.all.hab$loggerID)
+
+temp.mean.all.hab <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(temp.mean.all.hab) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, habitat, datetime) |>
+  #group_by(site, datetime) |>
+  summarise(mean.temp.air.hab = mean(temp_mean_air, na.rm = TRUE)) |>  
+  ungroup()
+  # mutate(mean.temp.hab = replace(mean.temp.hab, is.nan(mean.temp.hab), -10)) 
+
+temp.min.all.hab <- temp_env_all |> 
+  filter(sensor_name == "T.air_15_cm.min5p") |> #T.air_15_cm.mean
+    select("loggerID" = locality_id, sensor_name, datetime, "temp_min_air" = value) 
+temp.min.all.hab$loggerID = as.numeric(temp.min.all.hab$loggerID)
+
+temp.min.all.hab <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(temp.min.all.hab) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, habitat, datetime) |>
+  #group_by(site, datetime) |>
+  summarise(min.temp.air.hab = mean(temp_min_air, na.rm = TRUE)) |>  
+  ungroup()
+
+temp.max.all.hab <- temp_env_all |> 
+  filter(sensor_name == "T.air_15_cm.max95p") |> #T.air_15_cm.mean
+    select("loggerID" = locality_id, sensor_name, datetime, "temp_max_air" = value) 
+temp.max.all.hab$loggerID = as.numeric(temp.max.all.hab$loggerID)
+
+temp.max.all.hab <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(temp.max.all.hab) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, habitat, datetime) |>
+  #group_by(site, datetime) |>
+  summarise(max.temp.air.hab = mean(temp_max_air, na.rm = TRUE)) |>  
+  ungroup()
+
+moist.mean.all <- moist_env_all |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.mean") |> 
+  select("loggerID" = locality_id, sensor_name, datetime, "moist_mean" = value) 
+moist.mean.all$loggerID = as.numeric(moist.mean.all$loggerID) 
+moist.mean.all <- moist.mean.all|> 
+  left_join(temp.soil.mean.all) |> 
+  mutate(moist_mean = if_else(mean.temp.soil < 1, NA, moist_mean))
+
+moist.mean.all <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(moist.mean.all) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, datetime) |> 
+  #group_by(site, datetime) |> 
+  summarise(mean.moist = mean(moist_mean, na.rm = TRUE)) |> 
+  ungroup()# |> 
+
+
+moist.mean.all.hab <- moist_env_all |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.mean") |> 
+  select("loggerID" = locality_id, sensor_name, datetime, "moist_mean" = value) 
+moist.mean.all.hab$loggerID = as.numeric(moist.mean.all.hab$loggerID)
+moist.mean.all.hab <- moist.mean.all.hab|> 
+  left_join(temp.soil.mean.all.hab) |> 
+  mutate(moist_mean = if_else(mean.temp.soil.hab < 1, NA, moist_mean))
+
+moist.mean.all.hab <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(moist.mean.all.hab) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, habitat, datetime) |> 
+  #group_by(site, datetime) |> 
+  summarise(mean.moist.hab = mean(moist_mean, na.rm = TRUE)) |> 
+  ungroup()
+
+moist.min.all.hab <- moist_env_all |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.5p") |> 
+  select("loggerID" = locality_id, sensor_name, datetime, "moist_min" = value) 
+moist.min.all.hab$loggerID = as.numeric(moist.min.all.hab$loggerID)
+moist.min.all.hab <- moist.min.all.hab|> 
+  left_join(temp.soil.mean.all.hab) |> 
+  mutate(moist_min = if_else(mean.temp.soil.hab < 1, NA, moist_min))
+
+moist.min.all.hab <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(moist.min.all.hab) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, habitat, datetime) |> 
+  #group_by(site, datetime) |> 
+  summarise(min.moist.hab = mean(moist_min, na.rm = TRUE)) |> 
+  ungroup()
+
+moist.max.all.hab <- moist_env_all |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.95p") |> 
+  select("loggerID" = locality_id, sensor_name, datetime, "moist_max" = value) 
+moist.max.all.hab$loggerID = as.numeric(moist.max.all.hab$loggerID)
+moist.max.all.hab <- moist.max.all.hab|> 
+  left_join(temp.soil.mean.all.hab) |> 
+  mutate(moist_max = if_else(mean.temp.soil.hab < 1, NA, moist_max))
+
+moist.max.all.hab <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(moist.max.all.hab) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, habitat, datetime) |> 
+  #group_by(site, datetime) |> 
+  summarise(max.moist.hab = mean(moist_max, na.rm = TRUE)) |> 
+  ungroup()
+
+
+# Plot the data
+f_line_macro_1 <-ggplot(moist.mean.all, aes(x = datetime, y = mean.moist, color = site)) +
+  geom_line()+
+  labs(#title = "Average Soil Moisture Over Time",
+       x = "Date",
+       y = "Weekly Average Soil Volumetric Water Content",
+       color = "Site") +
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) +
+   theme(legend.position = "bottom")
+
+print(f_line_macro_1)
+
+f_line_macro_2 <-ggplot(temp.mean.all, aes(x = datetime, y = mean.temp.air, color = site)) +
+  geom_line()+
+  labs(#title = "Average air temperature Over Time",
+       x = "Date",
+       y = "Weekly Average Air (15cm) Temperature (°C)",
+       color = "Site")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) +
+   theme(legend.position = "bottom")
+
+print(f_line_macro_2)
+
+ plot_grid(f_line_macro_1, f_line_macro_2, ncol = 1)
+ 
+ f_line_micro_1 <-ggplot(moist.mean.all.hab, aes(x = datetime, y = mean.moist.hab, color = habitat)) +
+  geom_line() +
+   geom_line(data = moist.min.all.hab, aes(x = datetime, y = min.moist.hab), linetype = "dashed") +
+  geom_line(data = moist.max.all.hab, aes(x = datetime, y = max.moist.hab), linetype = "dashed") +
+  facet_wrap(~ site) +
+  labs(#title = "Average Soil Moisture Over Time",
+       x = "Date",
+       y = "Weekly Average Soil Solumetric Water Sontent",
+       color = "Habitat")+
+   theme(legend.position = "bottom")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) +
+   theme(legend.position = "bottom")
+
+print(f_line_micro_1)
+
+f_line_micro_2 <-ggplot(temp.mean.all.hab, aes(x = datetime, y = mean.temp.air.hab, color = habitat)) +
+  geom_line() +
+   geom_line(data = temp.min.all.hab, aes(x = datetime, y = min.temp.air.hab), linetype = "dashed") +
+  geom_line(data = temp.max.all.hab, aes(x = datetime, y = max.temp.air.hab), linetype = "dashed") +
+  facet_wrap(~ site) +
+  labs(#title = "Average air temperature Over Time",
+       x = "Date",
+       y = "Weekly Average Air (15cm) Temperature (°C)",
+       color = "Habitat")+
+   theme(legend.position = "bottom")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+print(f_line_micro_2)
+
+ plot_grid(f_line_micro_1, f_line_micro_2, ncol = 1)
+
+snow.mean.all <- snow_all |> 
+  select("loggerID" = locality_id, sensor_name, datetime, "snow" = value) 
+snow.mean.all$loggerID = as.numeric(snow.mean.all$loggerID)
+
+snow.mean.all <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(snow.mean.all) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, datetime) |> 
+  summarise(snow.hab = mean(snow, na.rm = TRUE)) |> 
+  ungroup() 
+
+
+f_line_micro_3 <-ggplot(snow.mean.all, aes(x = datetime, y = snow.hab))+
+  geom_line() +
+  facet_wrap(~ site) +
+  labs(#title = "Average air temperature Over Time",
+       x = "Date",
+       y = "snow cover")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+print(f_line_micro_3)
+
+
+GDD5.mean.all <- temp_env_all |> 
+  filter(sensor_name == "T.air_2_cm.GDD5") |>  # T.soil_8_cm.GDD5
+    select("loggerID" = locality_id, sensor_name, datetime, "GDD5_mean" = value) 
+GDD5.mean.all$loggerID = as.numeric(GDD5.mean.all$loggerID)
+
+GDD5.mean.all <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(GDD5.mean.all) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, datetime) |> 
+  summarise(GDD5.hab = mean(GDD5_mean, na.rm = TRUE)) |> 
+  ungroup() |> 
+  mutate(GDD5_day = ifelse(GDD5.hab > 0, 1, 0))
+
+GDD5.month.all <- GDD5.mean.all |> 
+  mutate(month_year = format(datetime, "%Y-%m")) |> 
+  group_by(site, month_year) |> 
+  summarise(GDD5_day_month = sum(GDD5_day, na.rm = TRUE))
+
+FDD0.mean.all <- temp_env_all |> 
+  filter(sensor_name == "T.soil_8_cm.FDD0") |> 
+    select("loggerID" = locality_id, sensor_name, datetime, "FDD0_mean" = value) 
+FDD0.mean.all$loggerID = as.numeric(FDD0.mean.all$loggerID)
+
+FDD0.mean.all <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(FDD0.mean.all) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, datetime) |> 
+  summarise(FDD0.hab = mean(FDD0_mean, na.rm = TRUE)) |> 
+  ungroup() |> 
+  mutate(FDD0_day = ifelse(FDD0.hab > 0, 1, 0)) 
+
+FDD0.month.all <- FDD0.mean.all |> 
+  mutate(month_year = format(datetime, "%Y-%m")) |> 
+  group_by(site, month_year) |> 
+  summarise(FDD0_day_month = sum(FDD0_day, na.rm = TRUE))
+
+DD.mean.all <- GDD5.mean.all |> 
+  left_join(FDD0.mean.all, by = join_by(site, datetime)) |> 
+  mutate(GDD5_day = ifelse(FDD0_day == 0, 1, 0)) |> 
+  mutate(month_year = format(datetime, "%Y-%m")) |> 
+  group_by(site, month_year) |> 
+  summarise(FDD0_day_month = sum(FDD0_day, na.rm = TRUE),
+            GDD5_day_month = sum(GDD5_day, na.rm = TRUE))
+
+snow.month.all <- snow.mean.all |> 
+  mutate(month_year_day = format(datetime, "%Y-%m-%d")) |> 
+  group_by(site, month_year_day) |> 
+  summarise(snow.day = sum(snow.hab, na.rm = TRUE)) |> 
+  ungroup() |> 
+  mutate(snow.day = ifelse(snow.day < 0.5, 0, 1)) |> 
+  mutate(month_year = as.character(substr(month_year_day, 1, 7))) |> 
+  group_by(site, month_year) |> 
+  summarise(snow.day.month = sum(snow.day, na.rm = TRUE)) |> 
+  ungroup()
+
+snow.year <- snow.month.all |> 
+  group_by(site) |> 
+  summarise(snow.year = sum(snow.day.month, na.rm = TRUE))
+ 
+f_line_micro_4 <- ggplot() +
+  geom_line(data = GDD5.mean.all, aes(x = datetime, y = GDD5.hab, color = "Growing Degree Day (>5°C)")) +
+  geom_line(data = FDD0.mean.all, aes(x = datetime, y = FDD0.hab, color = "Freezing Degree Day (<0°C)")) +
+  facet_wrap(~ site) +
+  labs(
+    #title = "Average air temperature Over Time",
+    x = "Date",
+    y = "Sum of temperature (°C)",
+    color = " "#Sum of temperature (°C)"
+  ) +
+  theme(legend.position = "bottom")+
+  scale_color_manual(
+    values = c("Growing Degree Day (>5°C)" = "green", "Freezing Degree Day (<0°C)" = "blue")
+  )+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+print(f_line_micro_4)
+
+
+f_histo_micro <- ggplot() +
+   geom_bar(data = DD.mean.all, 
+           aes(x = month_year, y = FDD0_day_month, fill = "Freezing Day (<0°C)"),
+           stat = "identity") +
+  geom_bar(data = DD.mean.all, 
+           aes(x = month_year, y = GDD5_day_month, fill = "Growing Day (>5°C)"),
+           stat = "identity") +
+ 
+  facet_wrap(~ site) +
+  labs(
+    x = "Date",
+    y = "Number of day",
+    fill = " Day Type"
+  ) +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    position = "dodge"
+  )+
+  scale_fill_manual(
+    values = c("Growing Day (>5°C)" = "green", "Freezing Day (<0°C)" = "blue")
+  ) +
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+
+
+print(f_histo_micro)
+
+# Add a type column to both dataframes
+GDD5.mean.all$type <- "Growing Degree Day (>5°C)"
+FDD0.mean.all$type <- "Freezing Degree Day (<0°C)"
+
+# Combine both datasets without creating a new combined dataframe
+f_line_micro_5 <- ggplot() +
+  geom_line(data = GDD5.mean.all, aes(x = datetime, y = GDD5.hab, color = site)) +
+  geom_line(data = FDD0.mean.all, aes(x = datetime, y = FDD0.hab, color = site)) +
+  facet_grid(type ~ ., scales = "free", labeller = labeller(type = c(
+    "Growing Degree Day (>5°C)" = "Growing Degree Day (>5°C)",
+    "Freezing Degree Day (<0°C)" = "Freezing Degree Day (<0°C)"
+  ))) +
+  labs(
+    x = "Date",
+    y = "Sum of temperature (°C)",
+    color = "Site"
+  )+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+print(f_line_micro_5)
+
+fig_save <- "D:/Utilisateurs/Touriere/Documents/GEN/4A/SIRD/Rapport/Images/R"
+
+join_macro <- ggarrange(
+  f_line_macro_1, f_line_macro_2,
+  labels = c("a)", "b)"),
+  ncol = 1,
+  nrow = 2,
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+join_macro
+
+ggsave(filename = paste0(fig_save, "/macro_comp.png"), plot = join_macro, width = 10, height = 12, units = "in", dpi = 300)
+
+join_micro <- ggarrange(
+  f_line_micro_1, f_line_micro_2,
+  labels = c("a)", "b)"),
+  ncol = 1,
+  nrow = 2,
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+join_micro
+
+ggsave(filename = paste0(fig_save, "/micro_comp.png"), plot = join_micro, width = 10, height = 12, units = "in", dpi = 300)
+```
+
+## Lygra
+
+```{r calculation for all the data}
+   
+## calculate virtual sensor VWC from raw TMS moisture signal
+tms.ly.calc <- mc_calc_vwc(tms.ly, soiltype = "universal") #reseach on soiltype and TOMST VERSION
+
+## virtual sensor with growing and freezing degree days
+tms.ly.calc <- mc_calc_gdd(tms.ly.calc, sensor = "TMS_T3",)
+tms.ly.calc <- mc_calc_fdd(tms.ly.calc, sensor = "TMS_T3")
+
+## virtual sensor to estimate snow presence from 2 cm air temperature 
+tms.ly.calc <- mc_calc_snow(tms.ly.calc, sensor = "TMS_T2")
+
+## summary data.frame of snow estimation
+tms.snow <- mc_calc_snow_agg(tms.ly.calc)
+ 
+temp_env  <- mc_env_temp(tms.ly, period = "month", min_coverage = 0.9)
+moist_env <- mc_env_moist(tms.ly.calc, period = "month", min_coverage = 0.9)
+
+
+```
+
+```{r calculation for the open habitat}
+#mean moisture
+moist.mean.ly.open <- tms.ly.open |> 
+   mc_calc_vwc( soiltype = "universal") |> 
+   mc_env_moist(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+moist.mean.ly.open <-  mutate(moist.mean.ly.open,
+                              avg_value = rowMeans(select(moist.mean.ly.open, -datetime, -sensor_name), na.rm = TRUE))
+
+# #min moisture  (not significant)
+# moist.min.ly.open <- tms.ly.open |> 
+#    mc_calc_vwc( soiltype = "universal") |> 
+#    mc_env_moist(period = "day", min_coverage = 0.9) |> 
+#   filter(sensor_name == "VWC.soil_0_15_cm.5p") |> 
+#   pivot_wider(
+#     id_cols = c(datetime, sensor_name),
+#     names_from = locality_id,
+#     values_from = value)
+# 
+# moist.min.ly.open <-  mutate(moist.min.ly.open,
+#                              avg_value = rowMeans(select(moist.min.ly.open, -datetime, -sensor_name), na.rm = TRUE))
+
+
+#mean temperature at 15cm
+temp.mean.ly.open <- tms.ly.open |> 
+   mc_env_temp(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.air_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+temp.mean.ly.open <-  mutate(temp.mean.ly.open,
+                              avg_value = rowMeans(select(temp.mean.ly.open, -datetime, -sensor_name), na.rm = TRUE))
+
+#mean gdd number
+gdd.mean.ly.open <- tms.ly.open |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.GDD5") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+gdd.mean.ly.open <-  mutate(gdd.mean.ly.open,
+                              avg_value = rowMeans(select(gdd.mean.ly.open, -datetime, -sensor_name), na.rm = TRUE))
+
+#mean frost days number
+fdd.mean.ly.open <- tms.ly.open |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.FDD0") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+fdd.mean.ly.open <-  mutate(fdd.mean.ly.open,
+                              avg_value = rowMeans(select(fdd.mean.ly.open, -datetime, -sensor_name), na.rm = TRUE))
+
+```
+
+```{r calculation for the forested habitat}
+
+#mean moisture
+moist.mean.ly.forested <- tms.ly.forested |> 
+   mc_calc_vwc( soiltype = "universal") |> 
+   mc_env_moist(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+moist.mean.ly.forested <-  mutate(moist.mean.ly.forested,avg_value = rowMeans(select(moist.mean.ly.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+
+#mean temperature at 15cm
+temp.mean.ly.forested <- tms.ly.forested |> 
+   mc_env_temp(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.air_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+temp.mean.ly.forested <-  mutate(temp.mean.ly.forested,
+                              avg_value = rowMeans(select(temp.mean.ly.forested, -datetime, -sensor_name), na.rm = TRUE))
+  
+
+#mean gdd number
+gdd.mean.ly.forested <- tms.ly.forested |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.GDD5") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+gdd.mean.ly.forested <-  mutate(gdd.mean.ly.forested,
+                              avg_value = rowMeans(select(gdd.mean.ly.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+#mean frost days number
+fdd.mean.ly.forested <- tms.ly.forested |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.FDD0") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+fdd.mean.ly.forested <-  mutate(fdd.mean.ly.forested,
+                              avg_value = rowMeans(select(fdd.mean.ly.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+```
+
+```{r calculation for the droughnet plots}
+
+#mean moisture
+moist.mean.ly.DN.90 <- tms.ly.DroughtNet.90 |> 
+   mc_calc_vwc( soiltype = "universal") |> 
+   mc_env_moist(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+moist.mean.ly.DN.90 <-  mutate(moist.mean.ly.DN.90,avg_value = rowMeans(select(moist.mean.ly.DN.90, -datetime, -sensor_name), na.rm = TRUE))
+
+
+#mean temperature at 15cm
+temp.mean.ly.DN.90 <- tms.ly.DroughtNet.90 |> 
+   mc_env_temp(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.air_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+temp.mean.ly.DN.90 <-  mutate(temp.mean.ly.DN.90,
+                              avg_value = rowMeans(select(temp.mean.ly.DN.90, -datetime, -sensor_name), na.rm = TRUE))
+  
+#mean gdd number
+gdd.mean.ly.DN.90 <- tms.ly.DroughtNet.90 |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.GDD5") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+gdd.mean.ly.DN.90 <-  mutate(gdd.mean.ly.DN.90,
+                              avg_value = rowMeans(select(gdd.mean.ly.DN.90, -datetime, -sensor_name), na.rm = TRUE))
+
+#mean frost days number
+fdd.mean.ly.DN.90 <- tms.ly.DroughtNet.90 |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.FDD0") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+fdd.mean.ly.DN.90 <-  mutate(fdd.mean.ly.DN.90,
+                              avg_value = rowMeans(select(fdd.mean.ly.DN.90, -datetime, -sensor_name), na.rm = TRUE))
+
+```
+
+## Microclimat analysis for Lygra
+
+### Plot for the comparison
+
+```{r moisture plots}
+
+p.moist.1 <- ggplot() +
+  geom_line(data = moist.mean.ly.open, aes(x = datetime, y = avg_value), color = "blue") +
+
+  geom_line(data = moist.mean.ly.forested, aes(x = datetime, y = avg_value), color = "red") +
+    geom_line(data = moist.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
+  
+  labs(title = " Microclimatic omparison", x = "Time", y = "Moist") +
+  theme(legend.position = c(x = 0.99, y = 0.01),
+    legend.justification = c(x = "right", y = "bottom"))
+
+p.moist.2 <- ggplot() +
+  geom_line(data = moist.mean.ly.open, aes(x = datetime, y = avg_value, color = "Open habitat")) +
+  geom_line(data = moist.mean.ly.forested, aes(x = datetime, y = avg_value, color = "Forested habitat")) +
+    geom_line(data = moist.mean.ly.DN.90, aes(x = datetime, y = avg_value, color = "DroughtNet 90%")) +
+  labs(title = "Graphique en ligne du temps vs valeur", x = "Temps", y = "Valeur", color = "Habitat Type") +
+  scale_color_manual(values = c("Open habitat" = "blue", "Forested habitat" = "red","DroughtNet 90%" = "green")) +
+  
+  theme(plot.title = element_text(hjust = 0.5))
+
+p.moist.1
+p.moist.2
+```
+
+```{r temperature plots}
+
+p.temp.1 <- ggplot() +
+  geom_line(data = temp.mean.ly.open, aes(x = datetime, y = avg_value), color = "blue") +
+
+  geom_line(data = temp.mean.ly.forested, aes(x = datetime, y = avg_value), color = "red") +
+  geom_line(data = temp.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
+  
+  labs(title = " Microclimatic comparison", x = "Time", y = "Temperature") +
+  theme(legend.position = c(x = 0.99, y = 0.01),
+    legend.justification = c(x = "right", y = "bottom"))
+
+p.temp.1
+```
+
+```{r growing days}
+p.gdd.1 <- ggplot() +
+  geom_line(data = gdd.mean.ly.open, aes(x = datetime, y = avg_value), color = "blue") +
+
+  geom_line(data = gdd.mean.ly.forested, aes(x = datetime, y = avg_value), color = "red") +
+  geom_line(data = gdd.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
+  
+  labs(title = " Microclimatic comparison", x = "Time", y = "Temperature") +
+  theme(legend.position = c(x = 0.99, y = 0.01),
+    legend.justification = c(x = "right", y = "bottom"))
+
+p.gdd.1
+
+```
+
+```{r Freezing degree days}
+p.fdd.1 <- ggplot() +
+  geom_line(data = fdd.mean.ly.open, aes(x = datetime, y = avg_value), color = "blue") +
+
+  geom_line(data = fdd.mean.ly.forested, aes(x = datetime, y = avg_value), color = "red") +
+  geom_line(data = fdd.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
+  
+  labs(title = " Microclimatic comparison", x = "Time", y = "Temperature") +
+  theme(legend.position = c(x = 0.99, y = 0.01),
+    legend.justification = c(x = "right", y = "bottom"))
+
+p.fdd.1
+```
+
+```{r combining graph}
+
+# Assembler les graphiques dans une seule image avec cowplot
+combined_plot <- plot_grid(p.moist.1, p.temp.1, p.gdd.1, p.fdd.1, ncol = 2, labels = "AUTO")
+
+# Ajouter une légende commune (exemple avec une légende fictive)
+legend <- get_legend(p.moist.2 + theme_minimal())
+
+final_plot <- cowplot::plot_grid(
+  combined_plot,
+  legend,
+  nrow = 1,
+  rel_widths = c(1, 0.2)
+)
+
+# Afficher le résultat
+final_plot
+
+```
+
+## Macroclimat analysis (between sites)
+
+```{r}
+#PCA ??
+```
