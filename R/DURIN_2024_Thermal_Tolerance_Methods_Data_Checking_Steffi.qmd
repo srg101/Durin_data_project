@@ -1,0 +1,1863 @@
+---
+title: "DURIN 2024 Thermal Tolerance"
+format: html
+editor: visual
+---
+
+## Import Data
+
+```{r}
+library(tidylog)
+library(tidyverse)
+library(readxl)
+library(stringr) 
+library(plyr)
+# Read in data from online spreadsheet that's downloaded to your personal drive.
+# Change the directory to be a local place on your computer.
+DURIN_data <- read_excel(path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/data/raw_data/2024 DURIN Plant Functional Traits.xlsx",
+                         sheet = "Data", col_names = TRUE, trim_ws = TRUE)
+
+# Note for now, some issues with column types reading in.
+# For example, the collection time with "10:59" format doesn't read in correctly, nor does the date format for Treatment Date.
+
+
+
+# Also, some column names aren't 'readable', i.e. Fv/Fm with '/', or height(s)
+# So we will change these names here
+DURIN_data <- plyr::rename(DURIN_data, c("height(s)"="heights",
+                     "Fv/Fm_Initial"="FvFm_Initial",
+                     "Fv/Fm_PostStress"="FvFm_PostStress",
+                     "Fv/Fm_Hr"="FvFm_Hr",
+                     "Fv/Fm_Final"="FvFm_Final",
+                     "DroughNet_plotID" = "DroughtNet_plotID"))
+
+# Senja is spelt wrongly as Senje in DropDowns
+DURIN_data$siteID<- revalue(DURIN_data$siteID, c("Senje" = "Senja"))
+
+# Create concantenated ID code for the plants 
+DURIN_data$PlantSampleID = paste(DURIN_data$siteID, DURIN_data$habitat,
+                                   DURIN_data$species,
+                                   sep = "_")
+# Version with the plant number also included
+DURIN_data$PlantSampleID2 = paste(DURIN_data$siteID, DURIN_data$habitat,
+                                   DURIN_data$species, DURIN_data$plant_nr,
+                                   sep = "_")
+
+```
+
+## General Custom Cleaning/Issue Identifying Codes
+
+```{r}
+# Useful custom functions ----
+## Look up an individual envelope ID number to see its info ----
+# Modify the select() to change which data are displayed
+check <- function(barcode) {
+  data <- DURIN_data |>
+    select(envelope_ID, day, month, year, siteID, habitat, species, proj_2024,
+           project,
+           ageClass, DroughtTrt, DroughtNet_plotID,
+           plant_nr, leaf_nr, leaf_age, sample,
+           CollTime, PairedWith, calluna_shoot_type, bulk_nr_leaves,
+           TempExp, TempExpTime, TempExpTimeUnit, FvFm_Initial, FvFm_PostStress, FvFm_Hr, FvFm_Final, 
+           wet_mass_g,
+           leaf_thickness_1_mm, leaf_thickness_2_mm, leaf_thickness_3_mm,
+           dry_mass_g, scanned,
+           nearest_DURIN_plotID, sampleType, heights,
+           TreatmentDate, TreatmentTime,
+           remark, remarks_2, flag,
+           # New Column, not on sheet but helpful
+           PlantSampleID
+           ) |>
+    filter(envelope_ID == barcode)
+  data
+}
+```
+
+## Data Checking DURIN_data
+
+For now, these codes run, but we have not fixed all the issues with mis-aligned site or habitat allocations, or plants that don't seem to have their full complement of leaves.
+
+[**This needs to be still resolved!!**]{.underline}
+
+```{r}
+## Find duplicate barcodes ----
+error.duplicates <- DURIN_data |>
+  # We don't care about exact duplicates so distinct() merges those
+  distinct() |>
+  # Then this filters to only duplicates
+  group_by(envelope_ID) %>%
+  filter(n() > 1)
+
+## Young/old ----
+# Vaccinium myrtillus can by definition only have new leaves as it is deciduous
+error.oldVM <- DURIN_data |>
+  # Filter to young-only plants
+  filter(species %in% c("Vaccinium myrtillus")) |>
+  # Filter to mislabelled leaf ages
+  filter(leaf_age == "old")
+
+
+## Leaf Types vs Temperatures ----
+# For hot runs
+# Leaf 1 = 20C, Leaf 2 = 30C, Leaf 3 = 34C, Leaf 4 = 38C,
+# Leaf 5 = 42C, Leaf 6 = 46C, Leaf 7 = 50C, Leaf 8 = 54C
+
+# For cold runs
+# Leaf 9 = 5C, Leaf 10 = 0C, Leaf 11 = -5C, Leaf 12 = -10C,
+# Leaf 13 = -15C, Leaf 14 = -20C
+error.leafNum.leafTemp <- DURIN_data %>% 
+  # Table leaf number by treatment temperatures
+  # Can remove siteID, species, habitat for the more general overview
+  group_by(proj_2024, siteID, species, habitat, leaf_nr, TempExp, TempExpTime) %>% 
+  tally()
+
+## FvFm Recovery Times for Hot and Cold Runs ----
+# For hot runs: general recovery time should be 24hrs, with some 18hr exceptions
+# For cold runs: general recovery time is 48hrs
+
+error.TempExpTime <- DURIN_data %>% 
+  # Table leaf number by treatment temperatures
+  # Can remove siteID, species, habitat for the more general overview
+  group_by(proj_2024, TempExpTime, TempExpTimeUnit) %>% 
+  tally()
+
+## Single vs Bulk Sampled Leaves ----
+# For VV and VM they should be single leaf samples
+# For CV and EN they should be bulked leaves, however, the numbers are variable. But all Calluna and Empentrum with bulked leaf samples should have a bulk leaf number provided. Later will check how envelope bulk number aligns with the leaf area scanned counts. 
+
+# There appears to be quite a lot of variation across the samples.
+# The VV and VM could be controlled for with code, assigning a bulk leaf nr sample of 1 for each of these. All CV and EN should be assigned bulk not leaf_nr, as we never would have only sampled an individual leaf (minimum weight thresholds meant often 4-5 leaves, if not more would have been required)
+
+error.SingleBulkedLeaves <- DURIN_data %>% 
+  # Table leaf number by treatment temperatures
+  # Can remove siteID, species, habitat for the more general overview
+  group_by(siteID, habitat, species, sample, bulk_nr_leaves) %>% 
+  tally()
+
+# TODO: Use the wet or dry weights to confirm number of bulked vs individual leaves. 
+
+
+## Single vs Multiple Individuals ----
+# We often had issues where a single plant was unable to contribute the 14-20 leaves required to go across multiple projects, i.e. hot, cold, hot rapid, and stomatal peels. Therefore, multiple individuals within close proximity were harvested together, and assigned as a single 'plant'. In these instance, multiple plant height measurements were taken and seperated by ' / ' format.
+
+# Split heights into multiple columns, one per measurement
+# Currently there is a maximum of 8 individuals, so 8 new columns could be created
+DURIN_data <- DURIN_data %>% 
+  separate_wider_delim(heights, delim = " / ",
+                       names = c("Height_1", "Height_2", "Height_3", "Height_4",
+                                 "Height_5", "Height_6", "Height_7", "Height_8"),
+                       too_few = "align_start",
+                       cols_remove = FALSE) %>%
+  mutate_at(c('Height_1','Height_2', 'Height_3', 'Height_4',
+              'Height_5', 'Height_6', 'Height_7', 'Height_8'), as.numeric)
+
+# Add a new column for the mean height of the individuals representing a single plant
+DURIN_data <- DURIN_data %>% 
+mutate(Height_mean = rowMeans(cbind(Height_1, Height_2, Height_3, Height_4,
+                                    Height_5, Height_6, Height_7, Height_8),
+                              na.rm = TRUE))
+
+
+# During processing, if all leaves did manage to be taken off a single individual, even though multiple were collected, then 'individual' should be flagged so that if we wanted we could use the samples for genetics etc later on.
+
+# Conversely, a sampled plant with only one individual, shouldn't have multiple heights associated with it, or the option 'multiple' for sample type.
+
+error.SingleMultiple <- DURIN_data %>% 
+  # Table single vs multiple indivduals
+  # Can remove siteID, species, habitat for the more general overview
+  group_by(proj_2024, siteID, habitat, species, sampleType) %>% 
+  tally()
+
+# Code to identify if samples came from individual plants or groups of plants
+# Currently doesn't work, hence commented out.
+DURIN_data <- DURIN_data %>%
+  rowwise() %>%
+  # Count how many height measurements we have
+  mutate(Height_count = sum(!is.na(c_across(Height_1:Height_8)))) %>% 
+  # Allocate column for easy filtering?
+  mutate(SingleIndividual_Check = case_when(Height_count >= 2 ~ "Multiple",
+                            Height_count == 1 ~ "Individual",
+                            Height_count == 0 ~ "None",
+                            T ~ as.character(Height_count)))
+
+
+
+## Are the FvFm values within range? ----
+# Values are between 0.00 and 0.90
+# Values should have 2 decimal places
+
+count_decimals = function(x) {
+  #length zero input
+  if (length(x) == 0) return(numeric())
+
+  #count decimals
+  x_nchr = x %>% abs() %>% as.character() %>% nchar() %>% as.numeric()
+  x_int = floor(x) %>% abs() %>% nchar()
+  x_nchr = x_nchr - 1 - x_int
+  x_nchr[x_nchr < 0] = 0
+
+  x_nchr
+}
+
+count_decimals(as.numeric(DURIN_data$FvFm_Initial))
+count_decimals(as.numeric(DURIN_data$FvFm_Final))
+
+# Check the range of FvFm
+check_FvFm_range <- function(data, column_name = "FvFm") {
+  # Filter rows where FvFm is outside the range [0, 0.9]
+  issues <- data %>%
+    filter(!!sym(column_name) < 0 | !!sym(column_name) > 0.9)
+  
+  return(issues)
+}
+
+# Test
+problematic_FvFm <- check_FvFm_range(DURIN_data, column_name = "FvFm_Final")
+print(problematic_FvFm)
+
+# Some seem to be in scientific notation instead of decimals, correct this.
+# Others are categorical i.e. 'Low Value'
+# Convert to numeric format
+DURIN_data$FvFm_Final <- case_when(DURIN_data$FvFm_Final == "Low Value" ~ NA,
+                                     .default = as.character(DURIN_data$FvFm_Final))
+# Make sure the FvFm_Final is numeric
+DURIN_data$FvFm_Final <- as.numeric(as.character(DURIN_data$FvFm_Final))
+
+
+
+## DURIN plot info ----
+### Does the envelope site match the plot site? ----
+### TODO: YES SOME OF THIS NEED TO BE FIXED!!
+error.durin.site <- DURIN_data |>
+  #Filter to just DURIN
+  filter(DroughtNet_plotID == "Not Applicable") |>
+  # Separate out the plot ID for identifying species
+  # separate_wider_delim(nearest_DURIN_plotID, delim = "_", 
+  #                      names = c("site.abbrv", "habitat.abbrv", "spp.abbrv", "rep.abbrv", remove = FALSE)) |>
+  # New version
+  # # Ensures missing pieces are replaced with NA
+  separate(nearest_DURIN_plotID, into = c("site.abbrv", "habitat.abbrv", "spp.abbrv", "rep.abbrv"),
+           sep = "_", fill = "right", remove = FALSE)  |>
+  # Create abbreviated site codes
+  mutate(site.code = case_when(
+    siteID == "Lygra" ~ "LY",
+    siteID == "Sogndal" ~ "SO",
+    siteID == "Senja" ~ "SE",
+    siteID == "Kautokeino" ~ "KA",
+    TRUE ~ "unknown"
+  )) |>
+  # Filter to problem envelopes
+  filter(site.code != site.abbrv) |>
+  # Make it human readable
+  relocate(c(site.code, site.abbrv), .after = envelope_ID)
+
+
+### Does the envelope habitat match the DURIN plot habitat? ----
+### TODO: YES SOME OF THIS NEED TO BE FIXED!!
+error.durin.habitat <- DURIN_data |>
+  #Filter to just DURIN
+  filter(DroughtNet_plotID == "Not Applicable") |>
+  # Separate out the plot ID for identifying species
+  # separate_wider_delim(nearest_DURIN_plotID, delim = "_", 
+  #                      names = c("site.abbrv", "habitat.abbrv", "spp.abbrv", "rep.abbrv", remove = FALSE)) |>
+    # New version
+  # # Ensures missing pieces are replaced with NA
+  separate(nearest_DURIN_plotID, into = c("site.abbrv", "habitat.abbrv", "spp.abbrv", "rep.abbrv"),
+           sep = "_", fill = "right", remove = FALSE)  |>
+  # Create abbreviated species codes
+  mutate(habitat.assigned = case_when(
+    habitat == "Open" ~ "O",
+    habitat == "Forested" ~ "F",
+    TRUE ~ "unknown"
+  )) |>
+  # Filter to problem leaves
+  filter(habitat.assigned != habitat.abbrv) |>
+  # Make it human readable
+  relocate(c(habitat.assigned, habitat.abbrv, nearest_DURIN_plotID), .after = envelope_ID)
+
+
+
+### How many leaves are there for each plant? ----
+# RECOMMENDED you run this AFTER updating all the other fields listed above
+# Calculate the maximum number of leaves for each plant
+durin.max.leaf_nr <- DURIN_data |>
+  # Filter to just DURIN
+  filter(DroughtNet_plotID == "Not Applicable") |>
+  # Select the columns needed
+  select(siteID, habitat, species, plant_nr, leaf_nr) |>
+  # Remove duplicate data
+  # distinct() |>
+  # Sort by plant number and slice the maximum
+  group_by(siteID,habitat, species, plant_nr) |>
+  slice_max(leaf_nr) |>
+  dplyr::rename(max.leaf.n = leaf_nr)
+
+
+## Replicates ----
+### Plant number -----
+# Which envelopes are missing plant number?
+error.durin.plantnr.missing <- DURIN_data |>
+  # Filter out known issues (wrong species)
+  # filter(!envelope_ID %in% c("AYN9607", "AST3380")) |>
+  # Filter to NA values
+  filter(is.na(plant_nr))
+
+nr.missing.list <- as.list(error.durin.plantnr.missing$envelope_ID)
+
+
+
+### Leaf number ----
+check.plant <- function(plot, plantnr) {
+  data = durin |>
+    select(envelope_ID, siteID,
+           DURIN_plot,
+           plotNR, habitat,
+           species, plant_nr, leaf_nr, leaf_age, plant_height,
+           calluna_shoot_type) |>
+    filter(DURIN_plot == plot & plant_nr == plantnr) |>
+    arrange(plant_nr, calluna_shoot_type, leaf_age, leaf_nr)
+  data
+}
+
+# Which envelopes are missing leaf numbers?
+error.durin.leafnr.missing <- DURIN_data |>
+  # Filter to NA values
+  filter(is.na(leaf_nr))
+
+# Which plants are missing leaves (or have extras)?
+# TODO: Check that some envelopes still don't need weighed or entered!!
+error.durin.leaves <- DURIN_data %>% 
+  filter(DroughtNet_plotID == "Not Applicable") %>% 
+  filter(proj_2024 %in% c("TT Hot", "TT Cold")) %>% 
+  dplyr::group_by(siteID, habitat, species, plant_nr) %>%
+  dplyr::summarise(n = dplyr::n(), .groups = "drop") %>%
+  dplyr::filter(n != 14)
+
+### Leaf age ----
+# Which envelopes are missing leaf ages?
+# TODO: Fix these from envelopes if possible.
+error.durin.age.missing <- DURIN_data |>
+  # Filter to species with young and old leaves
+  filter(species %in% c("Vaccinium vitis-idaea", "Empetrum nigrum")) |>
+  # Filter to NA values
+  filter(is.na(leaf_age))
+
+age.missing.list <- as.list(error.durin.age.missing$envelope_ID)
+
+
+
+### Samples with incomplete meta-data for wet and dry weights ----
+# TODO: Go and get these weights.
+# Function to identify missing values for wet and dry mass
+# Checks for missing values in wet_mass_g and dry_mass_g, then creates a new column (missing_data_status) that categorizes each row based on what is missing.
+identify_missing_mass_weights <- function(data) {
+  data <- data %>%
+    mutate(missing_mass_status = case_when(
+      is.na(wet_mass_g) & is.na(dry_mass_g) ~ "Both wet and dry mass missing",
+      is.na(wet_mass_g) ~ "Wet mass missing",
+      is.na(dry_mass_g) ~ "Dry mass missing",
+      TRUE ~ "No missing data"
+    ))
+  
+  # Filter only rows with missing data
+  missing_mass_rows <- data %>%
+    filter(missing_mass_status != "No missing data")
+  
+  return(missing_mass_rows)
+}
+
+# Example usage
+error.missing_mass_data <- identify_missing_mass_weights(DURIN_data)
+
+
+
+
+```
+
+## Flagging Data Value Issues
+
+Do not run this section of code either. Haven't yet weighed all the samples so many values do not yet make sense.
+
+```{r eval=FALSE}
+## Do wet and dry mass hold an expected relationship? ----
+library(ggh4x)
+
+ggplot(DURIN_data,
+       aes(x = as.numeric(wet_mass_g), y = as.numeric(dry_mass_g), color = leaf_age)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap2(. ~ species, scales = "free") +
+  theme_bw()
+
+# ggsave("visualizations/2023.10.17_dry.wetMass_scaledtobulkleafnr.png")
+
+ggplot(durin |> mutate(dry_mass_g = as.numeric(dry_mass_g))|>
+         mutate(mass_ratio = dry_mass_g/wet_mass_g),
+       aes(x = species, y = mass_ratio, color = leaf_age)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_point(position = position_jitterdodge()) +
+  geom_point(data = durin |> mutate(mass_ratio = dry_mass_g/wet_mass_g) |>
+               filter(envelope_ID %in% reweigh), color = "red") +
+  facet_wrap2(~species, scales = "free") +
+  theme_bw()
+
+ggsave()
+
+# Identify the outliers
+error.massratio <- DURIN_data |>
+  # Make dry mass numeric
+  mutate(dry_mass_g = as.numeric(dry_mass_g)) |>
+  # Make ratio of dry to wet mass
+  mutate(mass_ratio = dry_mass_g/wet_mass_g) |>
+  # Outlier values are eyeballed from the above graph
+  mutate(flag = case_when(
+    species == "Calluna vulgaris" & wet_mass_g > 0.1 ~ "high wet_mass_g",
+    species == "Calluna vulgaris" & dry_mass_g > 0.007 ~ "high dry_mass_g",
+    species == "Empetrum nigrum" & wet_mass_g > 0.05 ~ "high wet_mass_g",
+    species == "Empetrum nigrum" & dry_mass_g > 0.01 ~ "high dry_mass_g",
+    species == "Vaccinium myrtillus" & wet_mass_g > 0.1 ~ "high wet_mass_g",
+    species == "Vaccinium myrtillus" & dry_mass_g > 0.027 ~ "high dry_mass_g",
+    species == "Vaccinium vitis-idaea" & wet_mass_g > 0.25 ~ "high wet_mass_g",
+    species == "Vaccinium vitis-idaea" & dry_mass_g > 0.075 ~ "high dry_mass_g",
+    species == "Calluna vulgaris" & mass_ratio > 0.75 ~ "high dry to wet mass ratio",
+    species == "Empetrum nigrum" & mass_ratio > 0.75 ~ "high dry to wet mass ratio",
+    species == "Vaccinium myrtillus" & mass_ratio > 0.6 ~ "high dry to wet mass ratio",
+    species == "Vaccinium myrtillus" & mass_ratio < 0.2 ~ "low dry to wet mass ratio",
+    species == "Vaccinium vitis-idaea" & mass_ratio > 0.75 ~ "high dry to wet mass ratio",
+    species == "Vaccinium vitis-idaea" & mass_ratio < 0.2 ~ "low dry to wet mass ratio",
+    dry_mass_g > wet_mass_g ~ "dry mass more than wet mass",
+    TRUE ~ "ok"
+  )) |>
+  # Filter to the problem columns
+  filter(flag != "ok")|>
+  # Prep for the envelope check sheet
+  mutate(`Supporting Text Comment` = paste0("Check envelope", ". ", flag)) |>
+  select(envelope_ID, `Supporting Text Comment`, mass_ratio) |>
+  arrange(`Supporting Text Comment`)
+
+# For some reason the flag for dry mass greater than wet doesn't work
+table(error.massratio$flag)
+
+write.csv(error.massratio, "output/2024.05.15_error.massratio.csv")
+
+## Do SLA and leaf area hold an expected relationship? ----
+### Visualize outliers
+
+ggplot(DURIN_data,
+       aes(x = leaf_area, y = SLA, color = leaf_age)) +
+  geom_point(alpha = 0.3) +
+  facet_wrap(~species, scales = "free", ncol = 4) +
+  theme_bw()
+
+ggsave("visualizations/2024.07.15_SLAxAreaErrors_scaledtobulkleafnr.png")
+
+# From these visuals, we can estimate reasonable values
+error.SLAxArea <- error.sla |>
+  # Flag possible errors
+  mutate(flag_SLA = case_when(
+    species == "Calluna vulgaris" & (SLA < 25 | SLA > 150) ~ "CV SLA error",
+    species == "Empetrum nigrum" & (SLA < 40 | SLA > 200) ~ "EN SLA error",
+    species == "Vaccinium myrtillus" & (SLA < 125 | SLA > 400) ~ "VM SLA error",
+    species == "Vaccinium vitis-idaea" & (SLA < 40 | SLA > 300) ~ "VV SLA error",
+    TRUE ~ "okay"
+  ),
+  flag_area = case_when(
+    species == "Calluna vulgaris" & (leaf_area_scaled < 0 | leaf_area_scaled > 0.3) ~ "CV area error",
+    species == "Empetrum nigrum" & (leaf_area_scaled < 0 | leaf_area_scaled > 0.2) ~ "EN area error",
+    species == "Vaccinium myrtillus" & (leaf_area_scaled < 0 | leaf_area_scaled > 3.5) ~ "VM area error",
+    species == "Vaccinium vitis-idaea" & (leaf_area_scaled < 0 | leaf_area_scaled > 3.5) ~ "VV area error",
+    TRUE ~ "okay"
+  )) |>
+  filter(flag_SLA != "okay" | flag_area != "okay") |>
+  select(envelope_ID, flag_SLA, flag_area, wet_mass_g, dry_mass_g, leaf_area, SLA) |>
+  distinct()
+
+write.csv(error.SLAxArea, "output/2024.107.115_SLAxAreaErrors.csv")
+
+```
+
+## Exploratory Thermal Curves
+
+```{r warning=FALSE}
+# Hot Tolerance dataset only
+DURIN_TT <- subset(DURIN_data, envelope_ID != "") 
+DURIN_TT_HOT <- DURIN_TT %>% 
+  filter(proj_2024 == "TT Hot") %>% 
+  filter(DroughtNet_plotID == "Not Applicable") %>% 
+  # Extra 'crude' checking for mislabelled leaves from the cold treatment
+  filter(leaf_nr %in% c(1,2,3,4,5,6,7,8),
+         TempExp %in% c(20,30,34,38,42, 46, 50,54))
+
+# Plot Initial Curves
+DURIN_TT %>% 
+  # Filters out issues with hot plants with temps below lowest bath of 20
+  filter(TempExp >= 20) %>% 
+  # Various filters to remove samples associated with different projects below
+  filter(proj_2024 != "Multiple") %>% 
+  filter(proj_2024 == "TT Hot") %>% 
+  filter(DroughtNet_plotID == "Not Applicable") %>% 
+  # Extra 'crude' checking for mislabelled leaves from the cold treatment
+  filter(leaf_nr %in% c(1,2,3,4,5,6,7,8),
+         TempExp %in% c(20,30,34,38,42, 46, 50,54)) %>% 
+  # Create a plot of exposure temperature (TempExp) against the final FvFm measurements. 
+  # Group by the individuals that were sampled, and colour by habitat
+  ggplot(aes(x = TempExp, y= as.numeric(as.character(FvFm_Final)),
+             group = PlantSampleID, color = habitat)) +
+  # Add points
+  geom_point()+
+  # Add the smoothed line across the points, again coloured by habitat
+  # One line per individual
+  geom_smooth(method = "loess",
+              se = FALSE, aes(group = PlantSampleID, color = habitat)) +
+  labs(x = "Exposure Time (mins)", y = "FvFm", color = "Habitat") + 
+  # Make a differnet panel of the plot per site
+  facet_grid(species ~ siteID)
+
+# Plot Initial Curves
+DURIN_TT %>% 
+  # Filters out issues with hot plants with temps below lowest bath of 20
+  filter(TempExp >= 20) %>% 
+  filter(siteID == "Senja") %>% 
+  filter(species %in% c("Vaccinium vitis-ideae","Vaccinium myrtillus")) %>% 
+  filter(proj_2024 != "Multiple") %>% 
+  filter(proj_2024 == "TT Hot") %>% 
+  filter(DroughtNet_plotID == "Not Applicable") %>% 
+    # Extra 'crude' checking for mislabelled leaves from the cold treatment
+  filter(leaf_nr %in% c(1,2,3,4,5,6,7,8),
+         TempExp %in% c(20,30,34,38,42, 46, 50,54)) %>% 
+  ggplot(aes(x = TempExp, y= as.numeric(as.character(FvFm_Final)),
+             color = habitat)) +
+  geom_point()+ 
+  geom_smooth(method = "loess",
+              se = FALSE, aes(
+                color = habitat)) +
+  labs(x = "Exposure Time (mins)", y = "FvFm", color = "Habitat") + 
+  facet_grid(species ~ siteID)
+
+
+# Plot Initial Curves - For Methods Test
+DURIN_TT %>% 
+  # Filters out issues with hot plants with temps below lowest bath of 20
+  filter(TempExp >= 20) %>% 
+  filter(siteID == "Senja") %>% 
+  filter(proj_2024 != "Multiple") %>% 
+  filter(proj_2024 == "TT Hot") %>% 
+  filter(DroughtNet_plotID == "Not Applicable") %>% 
+    # Extra 'crude' checking for mislabelled leaves from the cold treatment
+  filter(leaf_nr %in% c(1,2,3,4,5,6,7,8),
+         TempExp %in% c(20,30,34,38,42, 46, 50,54)) %>% 
+  ggplot(aes(x = TempExp, y= as.numeric(as.character(FvFm_Final)),
+             color = habitat)) +
+  geom_point()+ 
+  geom_smooth(method = "loess",
+              se = FALSE, aes(
+                color = habitat)) +
+  labs(x = "Exposure Time (mins)", y = "FvFm", color = "Habitat") + 
+  facet_grid(species ~ siteID)
+
+
+```
+
+```{r}
+#Thanks for checking out this code for estimating heat tolerances using variable fluorescence!
+#Be sure to the read the Read.me.txt file.
+#Below, the "psiiht" function can calculate heat tolerances of PSII heat tolerance. 
+#For this function, define the the columns with the 1) Temperature & 2) FvFm variables, then the 3) control temperature, the 4) id/unique factor that you 
+#want to estimate the heat tolerances for, 5) indicate if you want to make plots, 6) the number of bootsrap iterations for estimating heat tolerances
+
+# setwd("C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/Heat_tolerance_function/")
+library(car)
+#htdata = read.csv("Sample_FvFm_data.csv")
+psiiht=function( Temperature, FvFm, control.temp, id, plot.est, boots){
+  l1=list(control.temp = control.temp, plot.est = plot.est, boots = boots)
+  attach(l1)
+  HTdf = data.frame(Temperature = Temperature, FvFm = FvFm, id = id)
+  
+ return(do.call("rbind", by(HTdf, list(HTdf$id), function(df){
+   Temperature=df[,which(colnames(df)=="Temperature")]
+   FvFm=df[,which(colnames(df)=="FvFm")]
+   id=df[,which(colnames(df)=="id")]
+   #get parameter estimates for logistic decay model
+   cof=coef(lm(logit(FvFm)~Temperature)) 
+   #Fit a non linear least squares model to the FvFm and Temperature data
+   HT.model <- nls(FvFm ~ theta1/(1 + exp(-(theta2 + theta3*Temperature))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
+                   trace=F, control=list(maxiter=1000, tol=1e-3))
+   
+   #Use the parameter estimates (coef(HT.model)[#])from the HT.model to predict a new fit based on a heat treatments from 23-62 degrees celcius. Here, # = 1:3.
+   y<-coef(HT.model)[1]/(1+exp(-(coef(HT.model)[2]+coef(HT.model)[3]*seq(20,66)))) 
+   
+   #Calculate half of the control Fv/Fm & a 95% reduction in FvFm with reference to control
+   half=mean(na.omit(FvFm[which(Temperature==control.temp)]))/2  
+   nine5=mean(na.omit(FvFm[which(Temperature==control.temp)]))*0.05  
+   #95 Confidence Interval
+   predict.boot=matrix(NA,40, boots)
+   T95=T50=Tcrit=c()
+   for(k in 1:boots){
+     #print(k)
+     srows <- sample(1:length(Temperature), length(Temperature),TRUE)
+     
+     if(class(try(nls(FvFm[srows] ~ theta1/(1 + exp(-(theta2 + theta3*Temperature[srows]))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
+                      trace=F, control=list(maxiter=1000, tol=1e-3)), silent=T)[[1]])=="nlsModel")
+     {HT.model2 <- nls(FvFm[srows] ~ theta1/(1 + exp(-(theta2 + theta3*Temperature[srows]))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
+                       trace=F, control=list(maxiter=1000, tol=1e-6))
+     predict.boot[,k]=coef(HT.model2)[1]/(1+exp(-(coef(HT.model2)[2]+coef(HT.model2)[3]*seq(20,66)))) 
+     #Estimate T95
+     T95[k]=(-log((coef(HT.model2)[1]/nine5)-1)-coef(HT.model2)[2])/coef(HT.model2)[3] 
+     
+     #Estimate T50
+     T50[k]=(-log((coef(HT.model2)[[1]]/half)-1)-coef(HT.model2)[[2]])/coef(HT.model2)[[3]]
+     T50k=(-log((coef(HT.model2)[[1]]/half)-1)-coef(HT.model2)[[2]])/coef(HT.model2)[[3]]
+     #Use model to predict changes in FvFm & make new dataframe
+     predict=data.frame(x=seq(20,66),y=coef(HT.model2)[1]/(1+exp(-(coef(HT.model2)[2]+coef(HT.model2)[3]*seq(20,66)))) ) #create a dataframe of predictions
+     df1=cbind(predict[-1,], predict[-nrow(predict),])[,c(3,1,4,2)]
+     #Use new dataframe to estimate the slope at between each 1-degree interval
+     df1$slp=as.vector(apply(df1, 1, function(x) summary(lm((x[3:4]) ~ x[1:2])) [[4]][[2]] ))
+     slp.at.tcrit=round(min(df1$slp), 3)*.15 #Determine where slope is 15% of max slope & round
+     #Estimate the FvFm at which the slope is 15% of max slope & less than T50
+     fvfv.at.tcrit=df1[which(abs(df1[which(df1[,1]<T50k),]$slp-slp.at.tcrit)==min(abs(df1[which(df1[,1]<T50k),]$slp-slp.at.tcrit))),][1,3]
+     Tcrit[k]=(-log((coef(HT.model2)[[1]]/fvfv.at.tcrit)-1)-coef(HT.model2)[[2]])/coef(HT.model2)[[3]] # Estimate the temperatureat which the slope is 15% of max slope
+     
+     }else{(class(try(nls(FvFm ~ theta1/(1 + exp(-(theta2 + theta3*Temperature))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
+                          data=data2[srows,], trace=F, control=list(maxiter=1000, tol=1e-3)), silent=T)[[1]])=="list")
+       predict.boot[,k]=NA
+       T95[k]=NA
+       T50[k]=NA
+       Tcrit[k]=NA }}
+   
+   FvFm.boot=t(apply(predict.boot, 1, function(x){quantile(x,c(0.025,0.975),na.rm=T)}))
+   
+   #Tcrit.ci=quantile(Tcrit,c(0.025,0.975),na.rm=T)
+   T50.ci=quantile(T50,c(0.025,0.975),na.rm=T)
+   #T95.ci=quantile(T95,c(0.025,0.975),na.rm=T)
+   
+   if(plot.est==T){ 
+     plot(NULL, NULL,xlab="Temperature",ylab="Fv/Fm",xlim=c(20,66),ylim=c(0,0.9), bty="l", lty=2)
+     text(22,0.3, pos=4, paste(unique(paste(id))), font=4)
+     points(Temperature, FvFm, xlab="Temperature", ylab="Fv/Fm",xlim=c(20,66), ylim=c(0,0.85), bty="l", lty=2, pch=5,  col="black")
+     lines(seq(20,66), y,lwd=1, col="black")
+     if(boots>1){
+     lines(seq(20,66), FvFm.boot[,1],lty=3, col="black")
+     lines(seq(20,66), FvFm.boot[,2],lty=3, col="black")
+     }
+     text(30,0, paste('Tcrit:', round(mean(na.omit(Tcrit)),1)), pos=4,col="light gray")
+     abline(v=round(mean(na.omit(Tcrit)),1), lty=2,lwd=1.5, col="light gray",  cex=0.8)
+     text(30,.1, paste('T50:',round(mean(na.omit(T50)),1)), pos=4, col="gray")
+     abline(v=round(mean(na.omit(T50)),1), lty=2,lwd=1.5, col="gray",cex=0.8)
+     text(30,.2, paste('T95:',round(mean(na.omit(T95)),1)),pos=4, col="black")
+     abline(v=round(mean(na.omit(T95)),1), lty=2,lwd=1.5, col="black", cex=0.8)
+   }
+   return(data.frame(id=(unique(id)), 
+                     #Tcrit.lci=round(Tcrit.ci[[1]],1),
+                     Tcrit.mn=round(mean(na.omit(Tcrit)),1),  
+                     #Tcrit.uci=round(Tcrit.ci[[2]],1),
+                     
+                     #T50.lci=round(T50.ci[[1]],1),
+                     T50.mn=round(mean(na.omit(T50)),1),  
+                     #T50.uci=round(T50.ci[[2]],1),
+                     
+                     #T95.lci=round(T95.ci[[1]],1),
+                     T95.mn=round(mean(na.omit(T95)),1)  
+                     #T95.uci=round(T95.ci[[2]],1)))
+   ))
+ })))
+  detach(l1)
+}
+
+# Run Function
+# Hot data only for now
+
+T50_estimates_DURIN <- psiiht(Temperature = DURIN_TT_HOT$TempExp,
+       FvFm = DURIN_TT_HOT$FvFm_Final,
+       control.temp = 20,
+       id = DURIN_TT_HOT$PlantSampleID,
+       plot.est = T,
+       boots = 3)
+
+
+# Test on smaller subset
+DURIN_TT_HOT_Lygra_O_VM <- DURIN_TT_HOT %>% 
+  filter(siteID == "Lygra" & habitat == "Open" & species == "Vaccinium myrtillus")
+
+T50_estimates_DURIN_LY_VM <- psiiht(Temperature = DURIN_TT_HOT_Lygra_O_VM$TempExp,
+       FvFm = DURIN_TT_HOT_Lygra_O_VM$FvFm_Final,
+       control.temp = 30,
+       id = DURIN_TT_HOT_Lygra_O_VM$PlantSampleID2,
+       plot.est = T,
+       boots = 3)
+
+```
+
+```         
+```
+
+```{r}
+# Version for the methods testing in Senja
+
+# Adapted from Feeley and Perez 2020 Paper.
+#Thanks for checking out this code for estimating heat tolerances using variable fluorescence!
+#Be sure to the read the Read.me.txt file.
+#Below, the "psiiht" function can calculate heat tolerances of PSII heat tolerance. 
+#For this function, define the the columns with the 1) Temperature & 2) FvFm variables, then the 3) control temperature, the 4) id/unique factor that you 
+#want to estimate the heat tolerances for, 5) indicate if you want to make plots, 6) the number of bootsrap iterations for estimating heat tolerances
+
+# Function to estimate T50 of FvFm
+# Note 'HTdf' is the template dataset used in the function by the original authors.
+
+psiiht.2 <- function(Temperature, FvFm, control.temp, id, site, plot.est, boots) {
+  l1 <- list(control.temp = control.temp, plot.est = plot.est, boots = boots)
+  HTdf <- data.frame(Temperature = Temperature, FvFm = FvFm, id = id, site = site)
+  
+  return(do.call("rbind", by(HTdf, list(HTdf$id, HTdf$site), function(df) {
+    Temperature <- df$Temperature
+    FvFm <- df$FvFm
+    id <- df$id
+    site <- df$site
+    
+    # Get parameters for the logistics model
+    custom_logit <- function(p) {
+      p[p < 0.025] <- 0.025
+      p[p > 0.975] <- 0.975
+      return(log(p / (1 - p)))
+    }
+    logit_FvFm <- custom_logit(FvFm)
+    cof <- coef(lm(logit_FvFm ~ Temperature))
+    
+    # Example: Adjusting initial values
+    start_params <- list(
+        theta1 = max(FvFm), 
+        theta2 = cof[1], 
+        theta3 = cof[2]
+    )
+    
+    model_fit <- tryCatch({
+      nls(FvFm ~ theta1 / (1 + exp(-(theta2 + theta3 * Temperature))),
+          start = start_params, algorithm = "port",
+          trace = FALSE, 
+          lower = c(theta1 = 0, theta2 = -Inf, theta3 = -Inf), 
+          upper = c(theta1 = 1, theta2 = Inf, theta3 = Inf),
+          control = list(maxiter = 5000, tol = 1e-6))
+    }, error = function(e) {
+      message("Error while fitting model : ", e$message)
+      return(NULL)
+    })
+    
+   if (is.null(model_fit)) {
+      # Check if id, siteID, etc are empty before including them in the data.frame
+      if(length(unique(id)) > 0 && length(unique(site)) > 0) {
+        return(data.frame(id = unique(id), site = unique(site), Tcrit.mn = NA, T50.mn = NA, T95.mn = NA))
+      } else {
+        return(NULL)  # Return NULL if any of the elements are empty
+      }
+   }
+    
+    print(coef(model_fit))
+    # TODO: Make sure to check the sequential values depending on the experimental set-up.
+    # We start at 20, rather than 23 as per the original. 
+    y <- coef(model_fit)[1] / (1 + exp(-(coef(model_fit)[2] + coef(model_fit)[3] * seq(20, 66))))
+    
+    # Calculation of T50 and T95 values
+    half <- mean(na.omit(FvFm[which(Temperature == control.temp)])) / 2  
+    nine5 <- mean(na.omit(FvFm[which(Temperature == control.temp)])) * 0.05  
+    
+    predict.boot <- matrix(NA, 47, boots)
+    T95 <- T50 <- Tcrit <- c()
+    
+    for(k in 1:boots) {
+    srows <- sample(1:length(Temperature), length(Temperature), TRUE)
+      boot_fit <- tryCatch({
+        nls(FvFm[srows] ~ theta1 / (1 + exp(-(theta2 + theta3 * Temperature[srows]))),  
+            start = start_params, algorithm = "port",
+            trace = FALSE, 
+            lower = c(theta1 = 0, theta2 = -Inf, theta3 = -Inf), 
+            upper = c(theta1 = 1, theta2 = Inf, theta3 = Inf),
+            control = list(maxiter = 1000, tol = 1e-3))
+      }, error = function(e) {
+        return(NULL)
+      })
+      
+      if (!is.null(boot_fit)) {
+        predict.boot[, k] <- coef(boot_fit)[1] / (1 + exp(-(coef(boot_fit)[2] + coef(boot_fit)[3] * seq(20, 66))))
+        
+        T95[k] <- (-log((coef(boot_fit)[1] / nine5) - 1) - coef(boot_fit)[2]) / coef(boot_fit)[3]
+        T50[k] <- (-log((coef(boot_fit)[1] / half) - 1) - coef(boot_fit)[2]) / coef(boot_fit)[3]
+        
+        predict <- data.frame(x = seq(20, 66), 
+                              y = coef(boot_fit)[1] / (1 + exp(-(coef(boot_fit)[2] + coef(boot_fit)[3] * seq(20, 66)))))
+        df1 <- cbind(predict[-1, ], predict[-nrow(predict), ])[, c(3, 1, 4, 2)]
+        df1$slp <- as.vector(apply(df1, 1, function(x) summary(lm((x[3:4]) ~ x[1:2]))[[4]][[2]]))
+        slp.at.tcrit <- round(min(df1$slp), 3) * .15 
+        fvfv.at.tcrit <- df1[which(abs(df1[which(df1[,1] < T50[k]),]$slp - slp.at.tcrit) == min(abs(df1[which(df1[,1] < T50[k]),]$slp - slp.at.tcrit))),][1, 3]
+        Tcrit[k] <- (-log((coef(boot_fit)[1] / fvfv.at.tcrit) - 1) - coef(boot_fit)[2]) / coef(boot_fit)[3]
+      } else {
+        predict.boot[, k] <- NA
+        T95[k] <- NA
+        T50[k] <- NA
+        Tcrit[k] <- NA
+      }
+    }
+    
+          FvFm.boot <- t(apply(predict.boot, 1, function(x) {quantile(x, c(0.025, 0.975), na.rm = TRUE)}))
+    T50.ci <- quantile(T50, c(0.025, 0.975), na.rm = TRUE)
+          FvFm.boot <- t(apply(predict.boot, 1, function(x) {quantile(x, c(0.025, 0.975), na.rm = TRUE)}))
+    T50.ci <- quantile(T50, c(0.025, 0.975), na.rm = TRUE)
+    
+if(plot.est == TRUE) {
+  plot(NULL, NULL, xlab = "Temperature", ylab = "Fv/Fm", xlim = c(20, 66), ylim = c(0, 0.9), bty = "l", lty = 2)
+  
+  # Add text to the top of the chart
+  mtext(paste(id, site, sep = " "), side = 3, line = 1, cex = 1, font = 4)
+  
+  # Plot the points
+  points(Temperature, FvFm, xlab = "Temperature", ylab = "Fv/Fm", xlim = c(20, 66), ylim = c(0, 0.85), bty = "l", lty = 2, pch = 5, col = "black")
+  
+  # Draw the curve if the data is available
+  if(!is.null(y)) {
+    lines(seq(20, 66), y, lwd = 1, col = "black")
+  }
+  
+  # Add the curves of the bootstraps if they are available
+  if(boots > 1) {
+    if(!is.null(FvFm.boot)) {
+      lines(seq(20, 66), FvFm.boot[, 1], lty = 3, col = "black")
+      lines(seq(20, 66), FvFm.boot[, 2], lty = 3, col = "black")
+    }
+  }
+  
+  # Show the values of Tcrit, T50, and T95 if they are not NA
+  if(!is.na(mean(na.omit(Tcrit)))) {
+    text(30, 0, paste(round(mean(na.omit(Tcrit)), 1)), pos = 4, col = "light gray")
+    abline(v = round(mean(na.omit(Tcrit)), 1), lty = 2, lwd = 1.5, col = "light gray", cex = 0.8)
+  } else {
+    text(30, 0, "NA", pos = 4, col = "light gray")
+  }
+
+  if(!is.na(mean(na.omit(T50)))) {
+    text(30, .1, paste(round(mean(na.omit(T50)), 1)), pos = 4, col = "gray")
+    abline(v = round(mean(na.omit(T50)), 1), lty = 2, lwd = 1.5, col = "gray", cex = 0.8)
+  } else {
+    text(30, .1, "NA", pos = 4, col = "gray")
+  }
+
+  if(!is.na(mean(na.omit(T95)))) {
+    text(30, .2, paste(round(mean(na.omit(T95)), 1)), pos = 4, col = "black")
+    abline(v = round(mean(na.omit(T95)), 1), lty = 2, lwd = 1.5, col = "black", cex = 0.8)
+  } else {
+    text(30, .2, "NA", pos = 4, col = "black")
+  }
+}
+    
+        
+    if(length(unique(id)) > 0 && length(unique(site)) > 0) {
+      return(data.frame(id = unique(id), 
+                        site = unique(site),
+                        Tcrit.mn = round(na.omit(Tcrit), 1),  
+                        T50.mn = round(na.omit(T50), 1),  
+                        T95.mn = round(na.omit(T95), 1)))
+    } else {
+      return(NULL)
+    }
+  })))
+}
+
+
+# Overall dataset
+T50_estimates_DURIN.2 <- psiiht.2(Temperature = DURIN_TT_HOT$TempExp,
+                                  site = DURIN_TT_HOT$siteID,
+       FvFm = DURIN_TT_HOT$FvFm_Final,
+       control.temp = 20,
+       id = DURIN_TT_HOT$PlantSampleID,
+       plot.est = T,
+       boots = 1000)
+
+
+# Overall dataset
+T50_estimates_DURIN.2a <- psiiht.2(Temperature = DURIN_TT_HOT$TempExp,
+                                  site = DURIN_TT_HOT$siteID,
+       FvFm = DURIN_TT_HOT$FvFm_Final,
+       control.temp = 30,
+       id = DURIN_TT_HOT$PlantSampleID,
+       plot.est = T,
+       boots = 1000)
+
+
+
+
+```
+
+```{r}
+
+## Overview with a boxplot
+# Seperate by concatenated ID
+
+T50_estimates_DURIN.2 <- T50_estimates_DURIN.2 %>% 
+  separate(id, "_",
+           into = c("siteID", "habitat", "species"),
+           remove = FALSE)
+
+# Define colour palettes
+Habitat <- c("Forested" = "#083508", "Open" = "#589758")
+Species <- c("Calluna vulgaris" = "#DF697E",
+             "Empetrum nigrum" = "#404040",
+             "Vaccinium myrtillus" = "#323284",
+             "Vaccinium vitis-idaea" = "#D93137")
+
+(HOT_boxplot_Methods <- ggplot(T50_estimates_DURIN.2, aes(x = siteID, y = T50.mn,
+                                            fill = habitat)) +
+                 geom_boxplot() +
+                 facet_grid(. ~ species) +
+                 scale_fill_manual(values = Habitat) +  
+                 labs(x = "Habitat",
+                      y = "T50 of Fv/Fm (ºC)",
+                      fill = "Species") + 
+                 theme_bw())
+
+# # Version with the legend at the bottom or the plot
+# (time_boxplot_Methods_base <- ggplot(Temp_Comb, aes(x = TempExpTime, y = T50.mn,
+#                                             fill = TempExpTime)) +
+#                  geom_boxplot() +
+#                  facet_grid(.~id) +
+#                  scale_fill_manual(values = c("#ea9999", "#e06666",
+#                                               "#cc0000","#990000", "#660000")) +  
+#                  labs(x = "Exposure Time (minutes)",
+#                       y = "T50 of Fv/Fm (ºC)",
+#                       fill = "Exposure Time (mins)") + 
+#                  theme_bw() +
+#                  theme(legend.position = "bottom"))
+```
+
+# Function to check the correlation between leaf number and Temperature Exposure
+
+Leaf 1-8 should correspond to Temperature Exposures of 20, 30, 34, 38, 42, 46, 50, and 54 respectively
+
+```{r function_check_leaf_temperature_alignment}
+library(dplyr)
+
+check_leaf_temperature_mapping <- function(df) {
+  # Define correct leaf-temp mapping
+  expected_mapping <- data.frame(
+    leaf_nr = 1:8,
+    expected_temp = c(20, 30, 34, 38, 42, 46, 50, 54)
+  )
+
+  df <- df %>%
+    group_by(siteID, habitat, species, plant_nr) %>%
+    
+    # Join expected temperature mapping to ensure correct assignment
+    left_join(expected_mapping, by = "leaf_nr") %>%
+    
+    # Check if recorded TempExp matches expected temperature for each leaf
+    mutate(LeafTempAligned = ifelse(TempExp == expected_temp, "Aligned", "Misaligned")) %>%
+    
+    ungroup()
+
+  return(df)
+}
+
+
+# Create Example Data with Misaligned Values
+df_misaligned <- data.frame(
+  siteID = rep(1:2, each = 24),
+  habitat = rep(c("Open", "Forested"), each = 12, times = 2),
+  species = rep(c("Species_A", "Species_B"), each = 6, times = 4),
+  plant_nr = rep(1:3, times = 8),
+  leaf_nr = rep(1:8, times = 3),
+  TempExp = c(
+    # Correct plant
+    20, 30, 34, 38, 42, 46, 50, 54,
+    # Misaligned (wrong temp for leaf 3 and missing leaf 6)
+    20, 30, 38, 34, 42, NA, 50, 54,
+    # Misaligned (missing leaf 2, wrong temp for leaf 4)
+    20, NA, 34, 42, 38, 46, 50, 54
+  ),
+  FvFm = runif(24, min = 0, max = 0.9)
+)
+
+# Apply function to detect misalignments
+df_checked <- check_leaf_temperature_mapping(df_misaligned)
+
+# Print flagged rows
+print(df_checked %>% filter(LeafTempAligned == "Misaligned"))
+
+#################################
+# Check on our dataframe
+#################################
+df_checked_DURIN_TT_HOT <- check_leaf_temperature_mapping(DURIN_TT_HOT)
+
+# Print flagged rows
+print(df_checked_DURIN_TT_HOT %>% 
+      filter(LeafTempAligned == "Misaligned"))
+# Or with only selected columns
+print(subset(df_checked_DURIN_TT_HOT, LeafTempAligned == "Misaligned",
+             select = c(envelope_ID, siteID, habitat, species, plant_nr, leaf_nr, leaf_age, sample,
+                TempExp, FvFm_Final, remark, PlantSampleID2, expected_temp, LeafTempAligned)))
+
+
+```
+
+# Functions to correct FvFm estimates for calculating T50
+
+In some cases the FvFm values go to zero, before getting higher again.
+
+In some instances these may be biological (as discussed in the Canberra thermal tolerance workshop), or it could be a feature of using seperate leaves (and possibly from different plants) so not all values may be consistent.
+
+In any case, these rebounds after the zero FvFm mean the function to calculate T50 cannot work properly as it can't create a logistics curve to calculate the 50% intercept point.
+
+Here we try to a function to test what happens if we change all subsequent FvFm after the first instance of a zero into zeros as well.
+
+```{r}
+library(dplyr)
+
+# filter_FvFm_by_leaf_nr <- function(df) {
+#   df <- df %>%
+#     arrange(siteID, habitat, species, plant_nr, leaf_nr) %>%  # Ensure correct ordering per plant
+#   
+#     group_by(siteID, habitat, species, plant_nr) %>%  # Group at the correct level
+# 
+#     # Identify first leaf_nr within each plant where FvFm_Final == 0
+#     mutate(first_zero_leaf = case_when(
+#       any(FvFm_Final == 0, na.rm = TRUE) ~ min(leaf_nr[FvFm_Final == 0], na.rm = TRUE),
+#       TRUE ~ NA_real_  # If no zero exists, assign NA
+#     )) %>%
+# 
+#     # Debugging output to confirm first_zero_leaf varies per plant
+#     mutate(Debug_FirstZero = first_zero_leaf) %>%
+# 
+#     # Apply correction ONLY after the first zero is detected per unique plant
+#     mutate(Filtered_FvFm = case_when(
+#       is.na(first_zero_leaf) ~ FvFm_Final,  # If no zero exists, keep original values
+#       leaf_nr <= first_zero_leaf ~ FvFm_Final,  # Preserve values before first zero
+#       TRUE ~ 0  # Only zero values strictly occurring after failure
+#     )) %>%
+# 
+#     ungroup() %>%
+#     # Remove helper columns *only if they exist*
+#     select_if(~ !any(names(.) %in% c("first_zero_leaf")))  
+#   return(df)
+# }
+
+
+#################
+# Loop version - works! (or maybe not....)
+# filter_FvFm_by_leaf_nr_loop <- function(df) {
+#   # Ensure correct ordering first of key variables
+#   df <- df %>% arrange(siteID, habitat, species, plant_nr, leaf_nr)
+# 
+#   # Split dataset into individual plant ID's
+#   df_list <- df %>%
+#     group_split(siteID, habitat, species, plant_nr) %>%
+#     lapply(function(plant_df) {
+#       # Find first leaf where FvFm_Final == 0 within the specific plant
+#       first_zero_leaf <- ifelse(any(plant_df$FvFm_Final == 0, na.rm = TRUE),
+#                                 min(plant_df$leaf_nr[plant_df$FvFm_Final == 0], na.rm = TRUE), NA)
+#       
+#       # Apply correction ONLY after the first zero leaf per unique plant
+#       plant_df$Filtered_FvFm <- ifelse(!is.na(first_zero_leaf) & plant_df$leaf_nr > first_zero_leaf, 0, plant_df$FvFm_Final)
+#       
+#       return(plant_df)
+#     })
+#   
+#   # Recombine the list into a full dataset
+#   df_corrected <- bind_rows(df_list)
+# 
+#   return(df_corrected)
+# }
+
+
+# New version as for some reason now the abvoe one doesn't work.
+# Solution: Change df into a tibble before group_split to avoid the warning. 
+
+filter_FvFm_by_leaf_nr_loop <- function(df) {
+  # Ensure correct ordering first of key variables
+  df <- df %>% arrange(siteID, habitat, species, plant_nr, leaf_nr)
+
+  # Convert to standard tibble (fixes group_split warning)
+  df <- as_tibble(df)
+
+  # Split dataset into individual plant ID's
+  df_list <- df %>%
+    group_split(siteID, habitat, species, plant_nr) %>%
+    lapply(function(plant_df) {
+      # Find first leaf where FvFm_Final == 0 within the specific plant
+      first_zero_leaf <- ifelse(any(plant_df$FvFm_Final == 0, na.rm = TRUE),
+                                min(plant_df$leaf_nr[plant_df$FvFm_Final == 0], na.rm = TRUE), NA)
+      
+      # Apply correction ONLY after the first zero leaf per unique plant
+      plant_df <- plant_df %>%
+        mutate(Filtered_FvFm = ifelse(!is.na(first_zero_leaf) & leaf_nr > first_zero_leaf, 0, FvFm_Final),
+               Zero_Adjustment_Status = ifelse(Filtered_FvFm == 0 & FvFm_Final != 0, "Zero-Adjusted", "Original"))
+
+      return(plant_df)
+    })
+  
+  # Recombine the list into a full dataset
+  df_corrected <- bind_rows(df_list)
+
+  return(df_corrected)
+}
+
+
+
+
+# Generate template dataset to test the function on
+# df_non_logistic <- expand.grid(
+#   siteID = 1:4,                      # 4 Sites
+#   habitat = c("Open", "Forested"),    # Both habitats at each site
+#   species = c("Species_A", "Species_B", "Species_C", "Species_D"),  # 4 species at each site/habitat
+#   plant_nr = 1:3,                     # At least 3 plants per species/habitat/site
+#   leaf_nr = 1:8                       # 8 leaves per plant (matching temperatures)
+# ) %>%
+#   arrange(siteID, habitat, species, plant_nr, leaf_nr) %>%
+#   mutate(TempExp = rep(c(20, 30, 34, 38, 42, 46, 50, 54), times = nrow(.) / 8),
+#          FvFm_Final = c(
+#            # ✅ Expected monotonic decline
+#            0.85, 0.80, 0.72, 0.50, 0.30, 0.15, 0, 0,
+#            # ❌ Non-logistic: Drops too early, then incorrectly recovers
+#            0.88, 0.84, 0.60, 0, 0.10, 0.25, 0.38, 0.20,
+#            # ❌ Erratic fluctuations at higher temperatures
+#            0.87, 0.82, 0.75, 0.60, 0.15, 0, 0.30, 0.22
+#          ))
+
+
+df_non_logistic <- expand.grid(
+  siteID = 1:4,                      # 4 Sites
+  habitat = c("Open", "Forested"),    # Both habitats at each site
+  species = c("Species_A", "Species_B", "Species_C", "Species_D"),  # 4 species at each site/habitat
+  plant_nr = 1:3,                     # At least 3 plants per species/habitat/site
+  leaf_nr = 1:8                       # 8 leaves per plant (matching temperatures)
+) %>%
+  arrange(siteID, habitat, species, plant_nr, leaf_nr) %>%
+  mutate(TempExp = rep(c(20, 30, 34, 38, 42, 46, 50, 54), times = nrow(.) / 8),
+         FvFm_Final = rep(c(
+           0.85, 0.80, 0.72, 0.50, 0.30, 0.15, 0, 0,   # Expected decline
+           0.88, 0.84, 0.60, 0, 0.10, 0.25, 0.38, 0.20, # Non-logistic response
+           0.87, 0.82, 0.75, 0.60, 0.15, 0, 0.30, 0.22  # Erratic fluctuations
+         ), length.out = nrow(.)))  # Ensure it repeats correctly
+
+
+# print(df_non_logistic)
+
+#filtered_df <- filter_FvFm_by_leaf_nr(df_non_logistic)
+filtered_df_loop <- filter_FvFm_by_leaf_nr_loop(df_non_logistic)
+
+# Print results
+#print(filtered_df)
+print(filtered_df_loop)
+
+
+
+# Visual Comparison Function: Pre vs. Post Filtering
+# Now, let's add a function that overlays the original and filtered FvFm values to verify how the filtering is applied per plant.
+
+# library(ggplot2)
+# library(tidyr)
+
+plot_FvFm_per_species <- function(df) {
+  # Turn the dataset into long format, and rename the differenet metrics for FvFm based on the zero-adjusted code above
+  df_long <- df %>%
+    pivot_longer(cols = c("FvFm_Final", "Filtered_FvFm"), 
+                 names_to = "DataType", values_to = "FvFm_Value")
+ # plot FvFm value types per plant number
+  ggplot(df_long, aes(x = TempExp, y = FvFm_Value, color = DataType, group = interaction(DataType, plant_nr))) +
+    geom_point(size = 3, alpha = 0.8) +
+    geom_line(size = 1.2) +
+    facet_wrap(~ species, scales = "free") +  # Now grouped by species instead of plant_nr
+    labs(title = "FvFm Comparison by Species",
+         x = "Temperature Exposure (°C)", 
+         y = "FvFm Value", 
+         color = "Data Type") +
+    theme_minimal(base_size = 14) +
+    theme(legend.position = "bottom")
+}
+
+# Use on the filtered dataset
+plot_FvFm_per_species(filtered_df_loop)
+
+
+# Try this on the hot dataset
+DURIN_TT_HOT_Filt_loop <- filter_FvFm_by_leaf_nr_loop(DURIN_TT_HOT)
+check_FvFm_filter <- DURIN_TT_HOT_Filt_loop %>% select(PlantSampleID2, leaf_nr, FvFm_Final, Filtered_FvFm, Zero_Adjustment_Status)
+plot_FvFm_per_species(DURIN_TT_HOT_Filt_loop)
+
+
+
+
+#############################################
+#### An interactive version of the plots to check FvFm status post-zero adjustements
+# library(ggplot2)
+# library(tidyr)
+library(plotly)
+library(htmlwidgets)
+
+# Convert dataset for proper visualization
+df_long <- filtered_df_loop %>%
+  pivot_longer(cols = c("FvFm_Final", "Filtered_FvFm"), 
+               names_to = "DataType", values_to = "FvFm_Value")
+
+# Create ggplot visualization
+interactive_plot <- ggplot(df_long, aes(x = TempExp, y = FvFm_Value, color = DataType, group = interaction(DataType, plant_nr))) +
+  geom_point(size = 3, alpha = 0.8) +
+  geom_line(size = 1.2) +
+  facet_wrap(~ siteID + habitat + species, scales = "free") +
+  labs(title = "Interactive FvFm Comparison",
+       x = "Temperature Exposure (°C)", 
+       y = "FvFm Value", 
+       color = "Data Type") +
+  theme_minimal(base_size = 14)
+
+# Convert ggplot to interactive Plotly visualization
+interactive_plotly <- ggplotly(interactive_plot)
+
+# Save plot as an interactive HTML file
+saveWidget(interactive_plotly, "FvFm_Comparison.html")
+
+
+### Test on our dataset
+# Convert dataset for proper visualization
+df_long_test <- DURIN_TT_HOT_Filt_loop %>%
+  pivot_longer(cols = c("FvFm_Final", "Filtered_FvFm"), 
+               names_to = "DataType", values_to = "FvFm_Value")
+
+# Create ggplot visualization
+interactive_plot_DURIN <- ggplot(df_long_test, aes(x = TempExp, y = FvFm_Value,
+                                             color = DataType, group = interaction(DataType, plant_nr))) +
+  geom_point(size = 3, alpha = 0.8) +
+  geom_line(size = 1.2) +
+  facet_wrap(~ siteID + habitat + species, scales = "free") +
+  labs(title = "Interactive FvFm Comparison",
+       x = "Temperature Exposure (°C)", 
+       y = "FvFm Value", 
+       color = "Data Type") +
+  theme_minimal(base_size = 14)
+
+# Convert ggplot to interactive Plotly visualization
+interactive_plotly_DURIN <- ggplotly(interactive_plot_DURIN)
+
+# Save plot as an interactive HTML file
+saveWidget(interactive_plotly_DURIN, "FvFm_Comparison_DURIN.html")
+
+
+
+
+# Plot Initial Curves to check against the data-set when unadjusted.
+DURIN_TT_HOT_Filt_loop %>% 
+  # Filters out issues with hot plants with temps below lowest bath of 20
+  filter(TempExp >= 20) %>% 
+  # Various filters to remove samples associated with different projects below
+  filter(proj_2024 != "Multiple") %>% 
+  filter(proj_2024 == "TT Hot") %>% 
+  filter(DroughtNet_plotID == "Not Applicable") %>% 
+  # Create a plot of exposure temperature (TempExp) against the final FvFm measurements. 
+  # In their Filtered from from the above code, i.e. values that went to zero FvFm should stay at zero..
+  # Group by the individuals that were sampled, and colour by habitat
+  ggplot(aes(x = TempExp, y= as.numeric(as.character(Filtered_FvFm)),
+             group = PlantSampleID, color = habitat)) +
+  # Add points
+  geom_point()+
+  # Add the smoothed line across the points, again coloured by habitat
+  # One line per individual
+  geom_smooth(method = "loess",
+              se = FALSE, aes(group = PlantSampleID, color = habitat)) +
+  # Make a differnet panel of the plot per site
+  facet_grid(species ~ siteID)
+
+
+# Plot Initial Curves
+DURIN_TT %>% 
+  # Filters out issues with hot plants with temps below lowest bath of 20
+  filter(TempExp >= 20) %>% 
+  # Various filters to remove samples associated with different projects below
+  filter(proj_2024 != "Multiple") %>% 
+  filter(proj_2024 == "TT Hot") %>% 
+  filter(DroughtNet_plotID == "Not Applicable") %>% 
+  # Create a plot of exposure temperature (TempExp) against the final FvFm measurements. 
+  # Group by the individuals that were sampled, and colour by habitat
+  ggplot(aes(x = TempExp, y= as.numeric(as.character(FvFm_Final)),
+             group = PlantSampleID, color = habitat)) +
+  # Add points
+  geom_point()+
+  # Add the smoothed line across the points, again coloured by habitat
+  # One line per individual
+  geom_smooth(method = "loess",
+              se = FALSE, aes(group = PlantSampleID, color = habitat)) +
+  # Make a differnet panel of the plot per site
+  facet_grid(species ~ siteID)
+
+
+
+# Function to plot the FvFm per plant
+# NOTE- THis is the Filtered FvFm not the FvFm_Final which is the original
+plot_FvFm_per_plant <- function(df) {
+  df %>%
+    ggplot(aes(x = TempExp, y = Filtered_FvFm, color = factor(plant_nr))) +
+    geom_point(size = 3, alpha = 0.7) +
+    geom_line(aes(group = plant_nr), linetype = "dashed", alpha = 0.5) +
+    facet_wrap(~ species + habitat + siteID, scales = "free") +
+    labs(title = "Thermal Response of FvFm per Plant",
+         x = "Temperature Exposure (°C)",
+         y = "FvFm Value (zero-adjusted)",
+         color = "Plant Number") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+}
+
+# Apply function to visualize dataset
+plot_FvFm_per_plant(DURIN_TT_HOT_Filt_loop)
+
+
+
+# NOTE- Useing Filtered_FvFm not the original FvFm_Final
+library(ggplot2)
+library(dplyr)
+
+
+# 2️⃣ Plot by Species, faceting by Site & Habitat
+plot_FvFm_species <- function(df) {
+  df %>%
+    ggplot(aes(x = TempExp, y = Filtered_FvFm, color = factor(plant_nr))) +
+    geom_point(size = 2, alpha = 0.7) +
+    geom_line(aes(group = plant_nr), linetype = "dashed", alpha = 0.5) +
+    facet_wrap(~ siteID + habitat + species, scales = "free") +
+    labs(title = "Thermal Response by Species",
+         x = "Temperature Exposure (°C)", y = "FvFm Value (zero-adjusted)") +
+    theme_minimal() + theme(legend.position = "bottom")
+}
+
+
+plot_FvFm_species(DURIN_TT_HOT_Filt_loop)
+
+
+# Plotly version
+plot_FvFm_species_plotly <- function(df) {
+  p <- ggplot(df, aes(x = TempExp, y = Filtered_FvFm, color = factor(plant_nr))) +
+    geom_point(size = 2, alpha = 0.7) +
+    geom_line(aes(group = plant_nr), linetype = "dashed", alpha = 0.5) +
+    facet_wrap(~ siteID + habitat + species, scales = "free") +
+    labs(title = "Thermal Response by Species",
+         x = "Temperature Exposure (°C)", y = "FvFm Value (zero-adjusted)") +
+    theme_minimal() + theme(legend.position = "bottom")
+  
+  # Convert ggplot to interactive plotly
+  return(ggplotly(p))
+}
+
+# Saave to interactive plot that we can export to html
+FvFm_species_plant_plot_interactive <- plot_FvFm_species_plotly(DURIN_TT_HOT_Filt_loop)
+
+# Save plot as an interactive HTML file
+saveWidget(FvFm_species_plant_plot_interactive, "DURIN_FvFm_Comparison_Species_Plant.html")
+
+
+```
+
+# Identify cases of FvFm declining then rebounding (not at zero)
+
+```{r}
+library(dplyr)
+
+# Step 1: Example Dataset with Known Rebounds
+# This dataset contains both normal trends and rebound cases, ensuring the function can correctly detect anomalies.
+library(dplyr)
+
+set.seed(42)  # Ensure reproducibility
+
+# Generate a balanced dataset
+df_example_rebounds <- expand.grid(
+  siteID = 1:4,  
+  habitat = c("Open", "Forested"),
+  species = c("Species_A", "Species_B", "Species_C", "Species_D"),
+  plant_nr = 1:3,
+  leaf_nr = 1:8
+) %>%
+  arrange(siteID, habitat, species, plant_nr, leaf_nr) %>%
+  mutate(TempExp = rep(c(20, 30, 34, 38, 42, 46, 50, 54), times = nrow(.) / 8),
+         FvFm_Final = runif(nrow(.), min = 0.5, max = 0.9),  # Generate diverse values
+         Filtered_FvFm = FvFm_Final)  # Initially set Filtered_FvFm to match original
+
+# Introduce controlled zero values for testing correction logic
+df_example_rebounds$FvFm_Final[c(40, 85, 200, 500)] <- 0  # Test filtering behavior
+
+# Introduce rebound cases for anomaly detection
+df_example_rebounds$FvFm_Final[c(45, 90, 220, 550)] <- df_example_rebounds$FvFm_Final[c(44, 89, 219, 549)] + 0.2  
+
+print(df_example_rebounds)
+
+
+library(dplyr)
+# Alternative formulation of example dataset
+# set.seed(42)  # Ensure reproducibility
+# 
+# df_example_rebounds <- expand.grid(
+#   siteID = 1:4,  
+#   habitat = c("Open", "Forested"),
+#   species = c("Species_A", "Species_B", "Species_C", "Species_D"),
+#   plant_nr = 1:3,
+#   leaf_nr = 1:8
+# ) %>%
+#   arrange(siteID, habitat, species, plant_nr, leaf_nr) %>%
+#   mutate(TempExp = rep(c(20, 30, 34, 38, 42, 46, 50, 54), times = nrow(.) / 8),
+#          FvFm_Final = runif(nrow(.), min = 0, max = 0.9))  # Generate random thermal responses
+# 
+# # Introduce some rebound cases manually for testing
+# df_example_rebounds$FvFm_Final[c(10, 25, 40, 80)] <- df_example_rebounds$FvFm_Final[c(9, 24, 39, 79)] + 0.2
+
+
+
+# FvFm Rebound Function
+# This function flags cases where FvFm rises after previously declining, identifying potential measurement inconsistencies.
+
+flag_FvFm_rebounds <- function(df) {
+  df <- df %>%
+    arrange(siteID, habitat, species, plant_nr, TempExp) %>%
+    group_by(siteID, habitat, species, plant_nr) %>%
+    mutate(Rebound_FvFm_Flag = case_when(
+      FvFm_Final > lag(FvFm_Final) & lag(FvFm_Final) < lag(lag(FvFm_Final)) ~ "Rebound_FvFm",
+      TRUE ~ "Normal"
+    )) %>%
+    ungroup()
+  
+  return(df)
+}
+
+df_flagged_rebounds <- flag_FvFm_rebounds(df_example_rebounds)
+
+
+# Step 3: Visualizing FvFm Rebound Events
+# This plot highlights rebound events with special markers, making them easy to review.
+
+plot_FvFm_rebounds <- function(df) {
+  ggplot(df, aes(x = TempExp, y = FvFm_Final, color = Rebound_FvFm_Flag, group = plant_nr)) +
+    geom_point(size = 3, alpha = 0.8) +
+    geom_line(size = 1.2, aes(group = plant_nr), color = "gray") +  # Background trend lines
+    facet_wrap(~ siteID + habitat + species + plant_nr, scales = "free") +
+    labs(title = "Detection of FvFm Rebounds",
+         x = "Temperature Exposure (°C)", 
+         y = "FvFm Value", 
+         color = "Rebound Event") +
+    scale_color_manual(values = c("Normal" = "black", "Rebound_FvFm" = "red")) +  # Rebounds in red
+    theme_minimal(base_size = 14) +
+    theme(legend.position = "bottom")
+}
+
+plot_FvFm_rebounds(df_flagged_rebounds)
+
+
+
+# Version adding a secondary flag column to highlight all samples that are, or occur post 'rebound'
+
+
+flag_post_rebound_samples <- function(df) {
+  df <- df %>%
+    arrange(siteID, habitat, species, plant_nr, leaf_nr) %>%
+    group_by(siteID, habitat, species, plant_nr) %>%
+
+    # Identify first leaf in each plant sequence where a rebound is flagged
+    mutate(first_rebound_leaf = ifelse(any(Rebound_FvFm_Flag == "Rebound_FvFm"), 
+                                       min(leaf_nr[Rebound_FvFm_Flag == "Rebound_FvFm"], na.rm = TRUE), NA)) %>%
+
+    # Apply labels based on rebound status
+    mutate(Rebound_FvFm_Flag_plant = case_when(
+      is.na(first_rebound_leaf) ~ "Normal",  # No rebound detected
+      leaf_nr >= first_rebound_leaf ~ "Rebound FvFm and Onwards",  # Any leaf after the first rebound
+      TRUE ~ "Normal"
+    )) %>%
+
+    ungroup() %>%
+    select(-first_rebound_leaf)  # Remove helper column
+
+  return(df)
+}
+
+# Ensure `Rebound_Flag` is created first
+df_flagged_rebounds <- flag_FvFm_rebounds(df_example_rebounds)
+
+# Apply post-rebound labeling
+df_flagged_rebound_post <- flag_post_rebound_samples(df_flagged_rebounds)
+
+
+
+
+
+
+# Plotly version
+library(ggplot2)
+library(plotly)
+library(tidyr)
+library(htmlwidgets)
+
+# Reshape the dataset for plotting
+df_long_rebounds <- df_flagged_rebounds %>%
+  pivot_longer(cols = c("FvFm_Final", "Filtered_FvFm"), 
+               names_to = "DataType", values_to = "FvFm_Value")
+
+# Create ggplot visualization
+interactive_plot_rebounds <- ggplot(df_long_rebounds, aes(x = TempExp, y = FvFm_Value, color = Rebound_FvFm_Flag, group = plant_nr)) +
+  geom_point(size = 3, alpha = 0.8) +
+  geom_line(size = 1.2, aes(group = plant_nr), color = "gray") +
+  facet_wrap(~ siteID + habitat + species, scales = "free") +
+  labs(title = "Interactive Detection of FvFm Rebounds",
+       x = "Temperature Exposure (°C)", 
+       y = "FvFm Value", 
+       color = "Rebound Event") +
+  scale_color_manual(values = c("Normal" = "black", "Rebound_FvFm" = "red")) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "bottom")
+
+# Convert ggplot to interactive Plotly visualization
+interactive_plotly_rebounds <- ggplotly(interactive_plot_rebounds)
+
+# Save plot as an interactive HTML file
+saveWidget(interactive_plotly_rebounds, "FvFm_Rebound_Comparison.html")
+
+
+
+
+# Table summary
+generate_rebound_summary <- function(df) {
+  df %>%
+    filter(Rebound_FvFm_Flag == "Rebound_FvFm") %>%
+    group_by(siteID, habitat, species, plant_nr) %>%
+    summarise(
+      Total_Rebounds = n(),
+      Temperature_Range = paste(min(TempExp), "-", max(TempExp), "°C"),
+      First_Rebound_Leaf = min(leaf_nr[Rebound_FvFm_Flag == "Rebound_FvFm"])
+    ) %>%
+    ungroup()
+}
+
+rebound_summary <- generate_rebound_summary(df_flagged_rebound_post)
+print(rebound_summary)
+
+
+
+
+#################################
+# On the DURIN data
+# Ensure `Rebound_Flag` is created first
+DURIN_flagged_rebounds_DURIN <- flag_FvFm_rebounds(DURIN_TT_HOT_Filt_loop)
+
+# Apply post-rebound labeling
+DURIN_flagged_rebound_post <- flag_post_rebound_samples(DURIN_flagged_rebounds_DURIN)
+# See plots
+# Reshape the dataset for plotting
+DURIN_long_rebounds <- DURIN_flagged_rebound_post %>%
+  pivot_longer(cols = c("FvFm_Final", "Filtered_FvFm"), 
+               names_to = "DataType", values_to = "FvFm_Value")
+
+# Create ggplot visualization
+DURIN_interactive_plot_rebounds <- ggplot(DURIN_long_rebounds, aes(x = TempExp, y = FvFm_Value, color = Rebound_FvFm_Flag, group = plant_nr)) +
+  geom_point(size = 3, alpha = 0.8) +
+  geom_line(size = 1.2, aes(group = plant_nr), color = "gray") +
+  facet_wrap(~ siteID + habitat + species, scales = "free") +
+  labs(title = "Interactive Detection of FvFm Rebounds",
+       x = "Temperature Exposure (°C)", 
+       y = "FvFm Value", 
+       color = "Rebound Event") +
+  scale_color_manual(values = c("Normal" = "black", "Rebound_FvFm" = "red")) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "bottom")
+
+# Convert ggplot to interactive Plotly visualization
+DURIN_interactive_plot_rebounds <- ggplotly(DURIN_interactive_plot_rebounds)
+
+# Save plot as an interactive HTML file
+saveWidget(DURIN_interactive_plot_rebounds, "DURIN_FvFm_Rebound_Comparison.html")
+
+
+```
+
+```{r}
+# Overall dataset
+T50_estimates_DURIN.2a <- psiiht.2(Temperature = DURIN_TT_HOT_Filt_loop$TempExp,
+                                  site = DURIN_TT_HOT_Filt_loop$siteID,
+       FvFm = DURIN_TT_HOT_Filt_loop$Filtered_FvFm,
+       control.temp = 20,
+       id = DURIN_TT_HOT_Filt_loop$PlantSampleID,
+       plot.est = T,
+       boots = 50)
+
+
+(HOT_boxplot_Methods.filt <- ggplot(T50_estimates_DURIN.2a, aes(x = siteID, y = T50.mn,
+                                            fill = habitat)) +
+                 geom_boxplot() +
+                 facet_grid(. ~ species) +
+                 scale_fill_manual(values = Habitat) +  
+                 labs(x = "Habitat",
+                      y = "T50 of Fv/Fm (ºC)",
+                      fill = "Species") + 
+                 theme_bw())
+
+```
+
+```{r}
+library(ggplot2)
+# An alternative version that is designed to store values even if function crashes
+psiiht.2_safe <- function(Temperature, FvFm, control.temp, id, site, plot.est, boots, save_plots = TRUE, plot_dir = "T50_plots") {
+  l1 <- list(control.temp = control.temp, plot.est = plot.est, boots = boots)
+  HTdf <- data.frame(Temperature = Temperature, FvFm = FvFm, id = id, site = site)
+
+  # Create results dataframe
+  results_df <- data.frame(id = character(), site = character(), Tcrit.mn = numeric(), 
+                           T50.mn = numeric(), T95.mn = numeric(), failure_reason = character(), 
+                           stringsAsFactors = FALSE)
+
+  # Create directory for saving plots
+  if (save_plots && !dir.exists(plot_dir)) dir.create(plot_dir)
+
+  by(HTdf, list(HTdf$id, HTdf$site), function(df) {
+    Temperature <- df$Temperature
+    FvFm <- df$FvFm
+    id <- df$id
+    site <- df$site
+
+    # Failure tracking
+    failure_reason <- NA
+
+    # Check for missing values
+    if (any(is.na(Temperature)) | any(is.na(FvFm))) {
+      failure_reason <- "Missing values in Temperature or FvFm"
+    }
+
+    # Ensure enough samples exist
+    if (nrow(df) < 3) {
+      failure_reason <- "Not enough samples for logistic model"
+    }
+
+    # Detect erratic distribution (e.g., increasing instead of declining)
+    if (!all(diff(FvFm) <= 0)) {
+      failure_reason <- "FvFm values fluctuate instead of decreasing"
+    }
+
+    # Get logistic model parameters
+    custom_logit <- function(p) {
+      p[p < 0.025] <- 0.025
+      p[p > 0.975] <- 0.975
+      return(log(p / (1 - p)))
+    }
+    
+    logit_FvFm <- custom_logit(FvFm)
+    cof <- tryCatch(coef(lm(logit_FvFm ~ Temperature)), error = function(e) NULL)
+
+    # Handle coefficient issues
+    if (is.null(cof)) {
+      failure_reason <- "Failed to compute logistic regression coefficients"
+    }
+
+    # Adjust initial values
+    start_params <- list(
+      theta1 = max(FvFm), 
+      theta2 = cof[1], 
+      theta3 = cof[2]
+    )
+
+    model_fit <- tryCatch({
+      nls(FvFm ~ theta1 / (1 + exp(-(theta2 + theta3 * Temperature))),
+          start = start_params, algorithm = "port",
+          trace = FALSE, 
+          lower = c(theta1 = 0, theta2 = -Inf, theta3 = -Inf), 
+          upper = c(theta1 = 1, theta2 = Inf, theta3 = Inf),
+          control = list(maxiter = 5000, tol = 1e-6))
+    }, error = function(e) {
+      failure_reason <- paste("NLS model fitting failed:", e$message)
+      return(NULL)
+    })
+
+    # Store results even if model fails
+    if (!is.null(model_fit)) {
+      T50_estimate <- (-log((coef(model_fit)[1] / (max(FvFm) / 2)) - 1) - coef(model_fit)[2]) / coef(model_fit)[3]
+      results_df <<- rbind(results_df, data.frame(id = unique(id), site = unique(site), 
+                                                  Tcrit.mn = round(T50_estimate, 1), 
+                                                  T50.mn = round(T50_estimate, 1), 
+                                                  T95.mn = round(T50_estimate, 1), 
+                                                  failure_reason = NA))
+    } else {
+      results_df <<- rbind(results_df, data.frame(id = unique(id), site = unique(site), 
+                                                  Tcrit.mn = NA, T50.mn = NA, T95.mn = NA, 
+                                                  failure_reason = failure_reason))
+    }
+
+    # Plot generation
+    if (plot.est) {
+      p <- ggplot(df, aes(x = Temperature, y = FvFm)) +
+        geom_point(color = "black") +
+        geom_smooth(method = "nls", formula = y ~ theta1 / (1 + exp(-(theta2 + theta3 * x))),
+                    method.args = list(start = start_params), se = FALSE, color = "blue") +
+        labs(title = paste("Thermal Response Curve:", unique(id)),
+             x = "Temperature (°C)", y = "FvFm") +
+        theme_minimal()
+
+      # Save plot if enabled
+      if (save_plots) {
+        ggsave(filename = paste0(plot_dir, "/", unique(id), "_T50_plot.png"), plot = p, width = 6, height = 4)
+      }
+
+      print(p)  # Show plot during execution
+    }
+  })
+
+  return(results_df)  # Final results table with errors logged
+}
+
+# Run the function with diagnostics and saved plots
+T50_estimates_DURIN.2_safe <- psiiht.2_safe(Temperature = DURIN_TT_HOT_Filt_loop$TempExp,
+                                       site = DURIN_TT_HOT_Filt_loop$siteID,
+                                       FvFm = DURIN_TT_HOT_Filt_loop$FvFm_Final,
+                                       control.temp = 30,
+                                       id = DURIN_TT_HOT_Filt_loop$PlantSampleID,
+                                       plot.est = TRUE,
+                                       boots = 1000,
+                                       save_plots = TRUE)
+
+# Print saved results table
+print(T50_estimates_DURIN.2_safe)
+
+
+T50_estimates_DURIN.2_safe <- T50_estimates_DURIN.2_safe %>% 
+  separate(id, "_",
+           into = c("siteID", "habitat", "species"),
+           remove = FALSE)
+
+
+(T50_plot <- ggplot(T50_estimates_DURIN.2_safe, aes(x = siteID, y = T50.mn,
+                                            fill = habitat)) +
+                 geom_boxplot() +
+                 facet_grid(. ~ species) +
+                 scale_fill_manual(values = Habitat) +  
+                 labs(x = "Habitat",
+                      y = "T50 of Fv/Fm (ºC)",
+                      fill = "Species") + 
+                 theme_bw())
+
+```
+
+```{r}
+psiiht.3 <- function(Temperature, FvFm, control.temp, habitat, siteID, species, plot.est, boots) {
+  # Create dataframe with relevant variables
+  HTdf <- data.frame(Temperature = Temperature, FvFm = FvFm, habitat = habitat, siteID = siteID, species = species)
+
+  return(do.call("rbind", by(HTdf, list( HTdf$siteID, HTdf$habitat, HTdf$species), function(df) {
+    Temperature <- df$Temperature
+    FvFm <- df$FvFm
+    habitat <- df$habitat
+    siteID <- df$siteID
+    species <- df$species
+
+    # Logistic model parameters
+    custom_logit <- function(p) {
+      p[p < 0.025] <- 0.025
+      p[p > 0.975] <- 0.975
+      return(log(p / (1 - p)))
+    }
+    
+    logit_FvFm <- custom_logit(FvFm)
+    cof <- coef(lm(logit_FvFm ~ Temperature))
+
+    # Initial model parameters
+    start_params <- list(
+        theta1 = max(FvFm), 
+        theta2 = cof[1], 
+        theta3 = cof[2]
+    )
+
+    model_fit <- tryCatch({
+      nls(FvFm ~ theta1 / (1 + exp(-(theta2 + theta3 * Temperature))),
+          start = start_params, algorithm = "port",
+          trace = FALSE, 
+          lower = c(theta1 = 0, theta2 = -Inf, theta3 = -Inf), 
+          upper = c(theta1 = 1, theta2 = Inf, theta3 = Inf),
+          control = list(maxiter = 5000, tol = 1e-6))
+    }, error = function(e) {
+      message("Error while fitting model: ", e$message)
+      return(NULL)
+    })
+
+    if (is.null(model_fit)) {
+      return(data.frame(siteID = unique(siteID),
+                        habitat = unique(habitat),
+                        species = unique(species),
+                        T50.mn = NA, T95.mn = NA, Tcrit.mn = NA))
+    }
+
+    # Generate predictions using the fitted model
+    y <- coef(model_fit)[1] / (1 + exp(-(coef(model_fit)[2] + coef(model_fit)[3] * seq(20, 66))))
+
+    # T50 and T95 calculations
+    half <- mean(na.omit(FvFm[which(Temperature == control.temp)])) / 2  
+    nine5 <- mean(na.omit(FvFm[which(Temperature == control.temp)])) * 0.05  
+
+    predict.boot <- matrix(NA, 47, boots)
+    T95 <- T50 <- Tcrit <- numeric(boots)
+
+    for (k in 1:boots) {
+      srows <- sample(1:length(Temperature), length(Temperature), TRUE)
+      
+      boot_fit <- tryCatch({
+        nls(FvFm[srows] ~ theta1 / (1 + exp(-(theta2 + theta3 * Temperature[srows]))),
+            start = start_params, algorithm = "port",
+            trace = FALSE, 
+            lower = c(theta1 = 0, theta2 = -Inf, theta3 = -Inf), 
+            upper = c(theta1 = 1, theta2 = Inf, theta3 = Inf),
+            control = list(maxiter = 1000, tol = 1e-3))
+      }, error = function(e) {
+        return(NULL)
+      })
+
+      if (!is.null(boot_fit)) {
+        predict.boot[, k] <- coef(boot_fit)[1] / (1 + exp(-(coef(boot_fit)[2] + coef(boot_fit)[3] * seq(20, 66))))
+        T95[k] <- (-log((coef(boot_fit)[1] / nine5) - 1) - coef(boot_fit)[2]) / coef(boot_fit)[3]
+        T50[k] <- (-log((coef(boot_fit)[1] / half) - 1) - coef(boot_fit)[2]) / coef(boot_fit)[3]
+      } else {
+        T95[k] <- NA
+        T50[k] <- NA
+        Tcrit[k] <- NA
+      }
+    }
+
+    # Confidence intervals
+    T50.ci <- quantile(T50, c(0.025, 0.975), na.rm = TRUE)
+    T95.ci <- quantile(T95, c(0.025, 0.975), na.rm = TRUE)
+
+    # Plot results if requested
+    if (plot.est == TRUE) {
+      plot(NULL, NULL, xlab = "Temperature", ylab = "Fv/Fm", xlim = c(20, 66), ylim = c(0, 0.9), bty = "l", lty = 2)
+      mtext(paste(habitat, siteID, species, sep = " "), side = 3, line = 1, cex = 1, font = 4)
+      points(Temperature, FvFm, pch = 5, col = "black")
+
+      if (!is.null(y)) {
+        lines(seq(20, 66), y, lwd = 1, col = "black")
+      }
+
+      if (boots > 1) {
+        FvFm.boot <- t(apply(predict.boot, 1, function(x) {quantile(x, c(0.025, 0.975), na.rm = TRUE)}))
+        lines(seq(20, 66), FvFm.boot[, 1], lty = 3, col = "black")
+        lines(seq(20, 66), FvFm.boot[, 2], lty = 3, col = "black")
+      }
+
+      if (!is.na(mean(na.omit(T50)))) {
+        text(30, .1, paste(round(mean(na.omit(T50)), 1)), pos = 4, col = "gray")
+        abline(v = round(mean(na.omit(T50)), 1), lty = 2, lwd = 1.5, col = "gray")
+      }
+    }
+
+    # Return results
+    return(data.frame( siteID = unique(siteID),
+                       habitat = unique(habitat),
+                       species = unique(species),
+                      T50.mn = round(mean(na.omit(T50)), 1),  
+                      T95.mn = round(mean(na.omit(T95)), 1),  
+                      Tcrit.mn = round(mean(na.omit(Tcrit)), 1)))
+  })))
+}
+
+
+
+
+# Assess data
+T50_estimates_DURIN.3 <- psiiht.3(Temperature = DURIN_TT_HOT$TempExp,
+                                  siteID = DURIN_TT_HOT$siteID,
+                                  habitat = DURIN_TT_HOT$habitat,
+                                  species = DURIN_TT_HOT$species,
+       FvFm = DURIN_TT_HOT$FvFm_Final,
+       control.temp = 30,
+       #id = DURIN_TT_HOT$PlantSampleID,
+       plot.est = T,
+       boots = 5)
+```
