@@ -1,0 +1,779 @@
+---
+title: "DURIN_2024_Thermal_Tolerance_Calluna_Lab"
+format: html
+editor: visual
+---
+
+## **Water Bath Hot Thermal Tolerance Protocol: Heat Duration**
+
+#### Import and clean the data
+
+First of all, import the data we're working with:
+
+```{r}
+# Install and load the relevant packages
+
+library(tidylog)
+library(tidyverse)
+library(readxl)
+library(stringr) 
+library(plyr)
+
+# Read in the dataframe
+DURIN_data <- read_excel(path = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/data/raw_data/CV_methods_2024.xlsx",
+                         sheet = "CV_Methods_Oct2024",
+                         col_names = TRUE,
+                         trim_ws = TRUE)
+
+# Create concantenated ID code for the plants
+
+# DURIN_data$PlantSampleID = paste(DURIN_data$species, DURIN_data$plant_nr, DURIN_data$TempExp, DURIN_data$TempExpTime, sep = "_")
+# DURIN_data$PlantSampleID = paste("CV", "_", "P", DURIN_data$plant_nr, "_", DURIN_data$TempExp, "_", "T", DURIN_data$TempExpTime, sep = "")
+
+# Rename some columns
+DURIN_data <- dplyr::rename(DURIN_data, "FvFm_Final" = "Fv/Fm_Final")
+DURIN_data <- dplyr::rename(DURIN_data, "FvFm_Hr" = "Fv/Fm_Hr")
+
+## Create a new concantenated ID code the plants. The last one includes Temperature and Time. So when it's time to run the code, the plot is trying to draw a line between all points for a plant (for a given Temperature and Time) but it can't because every point is unique. So the new ID's will just be a combination of Species + Plant.
+DURIN_data$PlantSampleID = paste("CV", "_", "P", DURIN_data$plant_nr)
+
+```
+
+#### Exploratory thermal curves
+
+Then, make a first run of the first section of DURIN Thermal Tolerance Methods code.
+
+```{r}
+
+# Plot Initial Curves
+DURIN_data %>% 
+  # Filters out issues with hot plants with temps below lowest bath of 20
+  filter(TempExp >= 20) %>% 
+  ggplot(aes(x = TempExp, y= as.numeric(as.character(FvFm_Final)),
+             group = PlantSampleID, color = as.factor(TempExpTime))) +
+  geom_point()+ 
+  geom_smooth(method = "loess",
+              se = FALSE, aes(group = PlantSampleID, color = as.factor(TempExpTime))) +
+  facet_grid(species ~ siteID) +
+    labs(x = "Temperature (Celsius)", y = "FvFm", color = "Exposure Time")
+
+
+```
+
+```{r}
+## Let's do a second run of the plot code, with the new ID's (without changing the code itself):
+
+# Plot Initial Curves
+DURIN_data %>% 
+  # Filters out issues with hot plants with temps below lowest bath of 20
+  filter(TempExp >= 20) %>% 
+  ggplot(aes(x = TempExp, y= as.numeric(as.character(FvFm_Final)),
+             group = PlantSampleID, color = as.factor(TempExpTime))) +
+  geom_point()+ 
+  geom_smooth(method = "loess",
+              se = FALSE, aes(group = PlantSampleID, color = as.factor(TempExpTime))) +
+    labs(x = "Temperature (Celsius)", y = "FvFm", color = "Exposure Time")
+
+
+## Now we want to distinguish the different temperature exposure curves by color:
+DURIN_data %>% 
+  # Filters out issues with hot plants with temps below lowest bath of 20
+  filter(TempExp >= 20) %>% 
+  ggplot(aes(x = TempExp, y= as.numeric(as.character(FvFm_Final)),
+             color = as.factor(TempExpTime))) +
+  geom_point()+ 
+  geom_smooth(method = "loess",
+              se = FALSE, aes(
+                color = as.factor(TempExpTime))) +
+  theme_bw() +
+  labs(x = "Temperature (Celsius)", y = "FvFm", color = "Exposure Time (minutes)") 
+```
+
+#### Function to calculate T50 metrics
+
+```{r}
+
+# Adapted from Feeley and Perez 2020 Paper.
+#Thanks for checking out this code for estimating heat tolerances using variable fluorescence!
+#Be sure to the read the Read.me.txt file.
+#Below, the "psiiht" function can calculate heat tolerances of PSII heat tolerance. 
+#For this function, define the the columns with the 1) Temperature & 2) FvFm variables, then the 3) control temperature, the 4) id/unique factor that you 
+#want to estimate the heat tolerances for, 5) indicate if you want to make plots, 6) the number of bootsrap iterations for estimating heat tolerances
+
+# Function to estimate T50 of FvFm
+# Note 'HTdf' is the template dataset used in the function by the original authors.
+
+psiiht.durin <- function(Temperature, FvFm, control.temp, id, TempExpTime, plot.est, boots) 
+                   {
+  l1 <- list(control.temp = control.temp, plot.est = plot.est, boots = boots)
+  HTdf <- data.frame(Temperature = Temperature, FvFm = FvFm, id = id, TempExpTime = TempExpTime) 
+  
+  return(do.call("rbind", by(HTdf, by(HTdf, list(HTdf$id,HTdf$TempExpTime)), function(df) {
+    Temperature <- df$Temperature
+    FvFm <- df$FvFm
+    id <- df$id
+    TempExpTime <- df$TempExpTime
+    
+    
+    
+    # Get parameters for the logistics model
+    custom_logit <- function(p) {
+      p[p < 0.025] <- 0.025
+      p[p > 0.975] <- 0.975
+      return(log(p / (1 - p)))
+    }
+    logit_FvFm <- custom_logit(FvFm)
+    cof <- coef(lm(logit_FvFm ~ Temperature))
+    
+    # Example: Adjusting initial values
+    start_params <- list(
+        theta1 = max(FvFm), 
+        theta2 = cof[1], 
+        theta3 = cof[2]
+    )
+    
+    model_fit <- tryCatch({
+      nls(FvFm ~ theta1 / (1 + exp(-(theta2 + theta3 * Temperature))),
+          start = start_params, algorithm = "port",
+          trace = FALSE, 
+          lower = c(theta1 = 0, theta2 = -Inf, theta3 = -Inf), 
+          upper = c(theta1 = 1, theta2 = Inf, theta3 = Inf),
+          control = list(maxiter = 5000, tol = 1e-6))
+    }, error = function(e) {
+      message("Erreur lors de l'ajustement du modèle : ", e$message)
+      return(NULL)
+    })
+    
+  if (is.null(model_fit)) {
+      # Check if id, habitat, and plant_nr are empty before including them in the data.frame
+      if(length(unique(id)) > 0 && length(unique(TempExpTime)) > 0) {
+        return(data.frame(id = unique(id), TempExpTime = unique(TempExpTime), Tcrit.mn = NA, T50.mn = NA, T95.mn = NA))
+      } else {
+        return(NULL)  # Return NULL if any of the elements are empty
+      }
+   }
+    
+    print(coef(model_fit))
+    # TODO: Make sure to check the sequential values depending on the experimental set-up.
+    # We start at 20, rather than 23 as per the original. 
+    y <- coef(model_fit)[1] / (1 + exp(-(coef(model_fit)[2] + coef(model_fit)[3] * seq(20, 66))))
+    
+    # Calculation of T50 and T95 values
+    half <- mean(na.omit(FvFm[which(Temperature == control.temp)])) / 2  
+    nine5 <- mean(na.omit(FvFm[which(Temperature == control.temp)])) * 0.05  
+    
+    predict.boot <- matrix(NA, 47, boots)
+    T95 <- T50 <- Tcrit <- c()
+    
+    for(k in 1:boots) {
+    srows <- sample(1:length(Temperature), length(Temperature), TRUE)
+      boot_fit <- tryCatch({
+        nls(FvFm[srows] ~ theta1 / (1 + exp(-(theta2 + theta3 * Temperature[srows]))),  
+            start = start_params, algorithm = "port",
+            trace = FALSE, 
+            lower = c(theta1 = 0, theta2 = -Inf, theta3 = -Inf), 
+            upper = c(theta1 = 1, theta2 = Inf, theta3 = Inf),
+            control = list(maxiter = 1000, tol = 1e-3))
+      }, error = function(e) {
+        return(NULL)
+      })
+      
+      if (!is.null(boot_fit)) {
+        predict.boot[, k] <- coef(boot_fit)[1] / (1 + exp(-(coef(boot_fit)[2] + coef(boot_fit)[3] * seq(20, 66))))
+        
+        T95[k] <- (-log((coef(boot_fit)[1] / nine5) - 1) - coef(boot_fit)[2]) / coef(boot_fit)[3]
+        T50[k] <- (-log((coef(boot_fit)[1] / half) - 1) - coef(boot_fit)[2]) / coef(boot_fit)[3]
+        
+        predict <- data.frame(x = seq(20, 66), 
+                              y = coef(boot_fit)[1] / (1 + exp(-(coef(boot_fit)[2] + coef(boot_fit)[3] * seq(20, 66)))))
+        df1 <- cbind(predict[-1, ], predict[-nrow(predict), ])[, c(3, 1, 4, 2)]
+        df1$slp <- as.vector(apply(df1, 1, function(x) summary(lm((x[3:4]) ~ x[1:2]))[[4]][[2]]))
+        slp.at.tcrit <- round(min(df1$slp), 3) * .15 
+        fvfv.at.tcrit <- df1[which(abs(df1[which(df1[,1] < T50[k]),]$slp - slp.at.tcrit) == min(abs(df1[which(df1[,1] < T50[k]),]$slp - slp.at.tcrit))),][1, 3]
+        Tcrit[k] <- (-log((coef(boot_fit)[1] / fvfv.at.tcrit) - 1) - coef(boot_fit)[2]) / coef(boot_fit)[3]
+      } else {
+        predict.boot[, k] <- NA
+        T95[k] <- NA
+        T50[k] <- NA
+        Tcrit[k] <- NA
+      }
+    }
+    
+          FvFm.boot <- t(apply(predict.boot, 1, function(x) {quantile(x, c(0.025, 0.975), na.rm = TRUE)}))
+    T50.ci <- quantile(T50, c(0.025, 0.975), na.rm = TRUE)
+          FvFm.boot <- t(apply(predict.boot, 1, function(x) {quantile(x, c(0.025, 0.975), na.rm = TRUE)}))
+    T50.ci <- quantile(T50, c(0.025, 0.975), na.rm = TRUE)
+    
+if(plot.est == TRUE) {
+  plot(NULL, NULL, xlab = "Temperature", ylab = "Fv/Fm", xlim = c(20, 66), ylim = c(0, 0.9), bty = "l", lty = 2)
+  
+  # Add text to the top of the chart
+  mtext(paste(id," ", "T", TempExpTime), side = 3, line = 1, cex = 1, font = 3, col = "#447099")
+  
+  # Plot the points
+  points(Temperature, FvFm, xlab = "Temperature", ylab = "Fv/Fm", xlim = c(20, 66), ylim = c(0, 0.85), bty = "l", lty = 2, pch = 20, col = "azure4")
+  
+  # Draw the curve if the data is available
+  if(!is.null(y)) {
+    lines(seq(20, 66), y, lwd = 2.5, col = "#447099")
+  }
+  
+  # Add the curves of the bootstraps if they are available
+  if(boots > 1) {
+    if(!is.null(FvFm.boot)) {
+      lines(seq(20, 66), FvFm.boot[, 1], lty = 2, lwd = 1, col = "black")
+      lines(seq(20, 66), FvFm.boot[, 2], lty = 2, lwd = 1, col = "black")
+    }
+  }
+  
+  # Show the values of Tcrit, T50, and T95 if they are not NA
+  if(!is.na(mean(na.omit(Tcrit)))) {
+    text(30, 0, paste(round(mean(na.omit(Tcrit)), 1)), pos = 4, col = "goldenrod1")
+    abline(v = round(mean(na.omit(Tcrit)), 1), lty = 2, lwd = 2, col = "goldenrod1", cex = 0.8)
+  } else {
+    text(30, 0, "NA", pos = 4, col = "goldenrod1")
+  }
+
+  if(!is.na(mean(na.omit(T50)))) {
+    text(30, .1, paste(round(mean(na.omit(T50)), 1)), pos = 4, col = "goldenrod2")
+    abline(v = round(mean(na.omit(T50)), 1), lty = 2, lwd = 2, col = "goldenrod2", cex = 0.8)
+  } else {
+    text(30, .1, "NA", pos = 4, col = "goldenrod2")
+  }
+
+  if(!is.na(mean(na.omit(T95)))) {
+    text(30, .2, paste(round(mean(na.omit(T95)), 1)), pos = 4, col = "goldenrod3")
+    abline(v = round(mean(na.omit(T95)), 1), lty = 2, lwd = 2, col = "goldenrod3", cex = 0.8)
+  } else {
+    text(30, .2, "NA", pos = 4, col = "goldenrod3")
+  }
+}
+    
+        
+    if(length(unique(id)) > 0 && length(unique(TempExpTime)) > 0) {
+      return(data.frame(id = unique(id),
+                        # plant_nr = unique(plant_nr),
+                        TempExpTime = unique(TempExpTime),
+                        Tcrit.mn = round(na.omit(Tcrit), 1),  
+                        T50.mn = round(na.omit(T50), 1),  
+                        T95.mn = round(na.omit(T95), 1)))
+    } else {
+      return(NULL)
+    }
+  })))
+}
+
+
+# Test on our plants
+# Create subset for the methods tests
+
+# Create concantenated ID code for the plants
+
+DURIN_data$FvFm_Final_num <- as.numeric(as.character(DURIN_data$FvFm_Final))
+
+
+
+DURIN_data$PlantSampleID <- paste(DURIN_data$species,
+                               DURIN_data$plant_nr,
+                                   sep="_")
+
+DURIN_data_subset <- DURIN_data %>% 
+  dplyr::select(species, plant_nr, TempExpTime, TempExp, FvFm_Final, PlantSampleID)
+
+## Run the function
+
+psiiht.durin(Temperature = DURIN_data_subset$TempExp,
+       FvFm = DURIN_data_subset$FvFm_Final,
+       control.temp = 20,
+       id = DURIN_data_subset$species,
+       #plant_nr = DURIN_data_subset$plant_nr,
+       TempExpTime = DURIN_data_subset$TempExpTime,
+       plot.est = T,
+       boots = 9) ## includes plant_nr
+
+T50metrics <- psiiht(Temperature = DURIN_data_subset$TempExp,
+                     FvFm = DURIN_data_subset$FvFm_Final,
+                     control.temp = 20,
+                     id = DURIN_data_subset$species,
+                     TempExpTime = DURIN_data_subset$TempExpTime,
+                     # plant_nr = DURIN_data_subset$plant_nr,
+                     plot.est = T,
+                     boots = 9) 
+
+
+
+## Export the T50 metrics data
+#write.csv(t50metrics, file = '......T50_metrics_lowboots.csv', row.names = FALSE)
+```
+
+#### Analysis of the variance (ANOVA)
+
+Next, we want to know if there is a significative difference between the T50 values based on the different TempExpTime:
+
+```{r}
+## Load the data
+
+#T50_data <- read.csv("C:/Users/albat/Dropbox/DURIN/stats/DURIN_TT_Testing/T50_metrics_lowboots.csv", header = TRUE, sep = ",")
+
+## Clean the dataset (select just the T50)
+T50_clean <- T50metrics %>% 
+  dplyr::select(id,
+                #plant_nr,
+                T50.mn) %>% 
+  dplyr::rename(c("TimeTreatment" = "id",
+                  # "PlantNr" = "plant_nr",
+                  "T50" = "T50.mn" )) %>%   na.omit()
+
+```
+
+ANOVA is used to assess **variation** of a **continuous dependent variable** (y = T50) across levels of one or more **categorical independent variables** (x =TempExpTime). The basic logic of ANOVA is simple: it compares variation *between* groups to variation *within* groups to determine whether the observed differences are due to chance or not. A ONE-way ANOVA only considers ONE factor.
+
+So, our question is: *How does T50 vary with the Time Treatment?*
+
+-   Our **response variable** is *`T50`*.
+
+-   Our **explanatory variable** is *TempExpTime*, with **5 levels**: 1 min, 5 min, 10 min, 15 min and 20 min.
+
+We want to compare the means of 5 independent groups (T1, T5, T10, T15 and T20) and we have one continuous response variable (T50) and one categorical explanatory variable (Time Treatment). **One-way ANOVA is the appropriate analysis!**
+
+Hypothesis: T50 will vary with Time Treatment. The higher the Time Treatment, the lower the T50.
+
+`Time Treatment`**is our explanatory variable and it is here coded as numerical variable, when it should be coded as factor (categorical variable) with 5 levels** (“1”, “5”, “10”, "15", "20"). The numbers represent the different categories of our explanatory variable, not actual count data. We therefore need to transform `Time Treatment`from numeric to factor variable.
+
+```{r}
+T50metrics$TempExpTime <- as.factor(as.character(T50metrics$TempExpTime))   
+
+# Makes TempExpTime into factor variable  
+
+## Reordering a factor's levels
+
+levels(T50metrics$TempExpTime)  # shows the different factor levels in their default order
+
+T50metrics$TempExpTime <- factor(T50metrics$TempExpTime,
+                                 levels = c('1', '5', '10', '15','20'),   # whichever order you choose will be reflected in plots etc
+                                 labels = c('1', '5', '10', '15','20')    # Make sure you match the new names to the original levels!
+                                 )   
+
+
+## Overview with a boxplot
+
+(time_boxplot <- ggplot(T50metrics, aes(x = TempExpTime, y = T50.mn,
+                                            fill = TempExpTime)) +
+                 geom_boxplot() +
+                 scale_fill_manual(values = c("#ea9999", "#e06666", "#cc0000","#990000", "#660000")) +  
+                 labs(x = "Exposure Time (minutes)",
+                      y = "T50 of Fv/Fm (ºC)",
+                      fill = "Exposure Time (mins)") + 
+                 theme_bw())
+
+(time_boxplot2 <- ggplot(T50metrics, aes(x = TempExpTime, y = T50.mn,
+                                            fill = TempExpTime)) +
+                 geom_boxplot() +
+                 scale_fill_manual(values = c("#ea9999", "#e06666", "#cc0000","#990000", "#660000")) +  
+                 labs(x = "Exposure Time (minutes)",
+                      y = "T50 of Fv/Fm (ºC)",
+                      fill = "Exposure Time (mins)") + 
+                 theme_bw() +
+                theme(legend.position = "bottom"))
+
+              
+
+# Saving boxplot
+#ggsave(frog_boxplot, file = "assets/img/frog_boxplot.png", width = 9, height = 7)            
+
+```
+
+Some **boxes don’t overlap, meaning there is likely a statistically significant difference between groups.** To check this (you guessed it) we need **ANOVA!**
+
+```{r}
+### ONE-WAY ANOVA -----
+
+T50_anova <- aov(T50.mn ~ TempExpTime, data = T50metrics)
+summary(T50_anova)
+
+```
+
+-   **ANOVA partitions the total variance into**: a) **A component that can be explained by the predictor variable** (variance *between* levels of the treatment i.e. Time groups): the first row of your table. b) **A component that cannot be explained by the predictor variable** (variance *within* levels, the residual variance): the second row of your table.
+
+Here, p is highly significant (p \< 2e-16 \*\*\*). This means there is a significant difference between T50 values under different time treatments. Our predictor variable has had a significant effect on your response variable.
+
+ANOVA makes 3 fundamental assumptions:
+
+a\. **Data are normally distributed**.
+
+b\. **Variances are homogeneous**.
+
+c\. **Observations are independent**.
+
+**We need to check that model assumptions are met, in order to trust ANOVA outputs.**
+
+a. **Residuals histogram** and **Normal Q-Q plot**: Normality can be checked via a frequency histogram of the residuals and a quantile plot where the residuals are plotted against the values expected from a normal distribution.
+
+```{r}
+# Checking normality
+par(mfrow = c(1,2))  # This code put two plots in the same window
+hist(T50_anova$residuals)   # Makes histogram of residuals  
+plot(T50_anova, which = 2)   # Makes Q-Q plot
+
+## What to look for: The histogram of residuals should follow a normal (gaussian) distribution and the points in the Q-Q plot should lie mostly on the straight line. --> more or less accomplish
+```
+
+b\. **Residuals VS Fitted plot**: To check that the variation in the residuals is approximately equal across the range of the predictor variable (i.e. check for **homoscedasticity**) we can plot the residuals against the fitted values from the `aov` model object. **Fitted values are what the model predicts for the response variable.**
+
+```{r}
+# Checking homoscedasticity (Homogeneity of variances)
+plot(T50_anova, which = 1)  # Makes residuals VS fitted plot
+
+## What to look for: We want to see a straight red line centered around zero! This means residuals do NOT systematically differ across different groups. --> quite perfectly centered
+```
+
+c. **ANOVA assumes that all replicate measures are independent of each other:**
+
+Two measures are independent if the measurement from one individual gives no indication as to which value the measurement from another individual will produce. Replicate measures must be equally likely to be sampled from the population of possible values for each level. **This issue needs to be considered at the experimental design stage**. If data are grouped in any way, then more complex designs are needed to account for additional factors. A mixed model approach is advised for hierarchical data.
+
+We can communicate our findings in a few ways:
+
+-   **Verbally**: “T50 mean significantly varied with time treatment **(ANOVA, F = 107.7, df = 4, p = 2.2e-16)**” **OR** “Time treatment had a statistically significant effect on T50 mean values”.
+
+-   **Visually**: We can visualise our results with a **boxplot**, as we did above, and with a **barplot of group means with standard error bars**.
+
+Firstly, let’s create a new data frame with the `summarise()` function, which allows you to calculate summary statistics including our **sample size (n)**, **mean T50 value** per time treatment level, **standard deviation and standard error values.** Standard deviation is a measure of the spread of values around the mean. Standard error is a measure of the statistical accuracy of an estimate.
+
+```{r}
+summary_stats <- T50metrics %>%
+                 group_by(TempExpTime) %>%
+                 dplyr::summarise(n = n(),  # Calculating sample size n
+                           average_T50 = mean(T50.mn),  
+                           # Calculating mean hatching time
+                           SD = sd(T50.mn))%>%  # Calculating standard deviation
+                 mutate(SE = SD / sqrt(n))  # Calculating standard error
+
+```
+
+Now let's plot our graph:
+
+```{r}
+# Making a barplot
+(T50_barplot_1 <- ggplot(data = summary_stats) +                                  
+                   geom_bar(aes(x = TempExpTime, y = average_T50,
+                               fill = TempExpTime),
+                               stat = "identity", colour = "black") +               
+                   geom_errorbar(aes(x = TempExpTime, ymin = average_T50 - SE,
+                                     ymax = average_T50 + SE), width = 0.2,
+                                     colour="black", alpha=0.9, size=1) +  
+                                     # Adding standard error bars        
+                 scale_fill_manual(values = c("#ea9999", "#e06666", "#cc0000","#990000", "#660000")) +  
+                   labs(x = "Time treatment (minutes)", y = " Average T50 value (ºC)") +
+                       # caption = "\nFig.3 Forgspawn exposed to lowest temperature (13°C) was
+                       # the slowest to hatch. Non-overlapping S.E. bars indicate significant
+                       #differences among mean groups. n = 60.") +
+                       # caption = "\nFig.3") +  # Adding caption for figure in panel
+                   theme_bw() +                                              
+                   theme(legend.position = "none"))
+
+## Making a boxplot
+
+
+(time_boxplot2 <- ggplot(summary_stats) +
+     geom_errorbar(aes(x = TempExpTime, ymin = average_T50 - SE,
+                                     ymax = average_T50 + SE),
+                   width = 0.2,
+                   colour = "black",
+                   alpha = 0.9,
+                   size = 0.5) + 
+                     geom_point(aes(x = TempExpTime,
+                                    y = average_T50, fill = TempExpTime),
+                                size = 3) +
+                 scale_fill_manual(values = c("#ea9999", "#e06666", "#cc0000","#990000", "#660000")) +  
+                 labs(x = "Exposure Time (Minutes)",
+                      y = "Average T50 value (ºC)",
+                      fill = "Exposure Time (Minutes)") + 
+                 theme_bw())
+
+```
+
+We want to include the significance between Time Treatments to the T50_clean dataset boxplot.
+
+```{r}
+## post hoc table
+
+## The means comparison by Tukey’s test can be run on the object resulting from the analysis of variance (anova). The result (below) is an extensive table with all pairwise comparisons and the p-value for each one of them. This data can be tricky to interpret and it is usual to use letters to indicate significant differences among the means.
+
+# Tukey's test
+tukey <- TukeyHSD(T50_anova)
+print(tukey)
+```
+
+Generate the compact letters:
+
+```{r}
+library(lme4)
+# install.packages("multcomp")
+ library(multcomp)
+
+# install.packages("emmeans")
+ library(emmeans)
+
+## Use {emmeans} to estimate marginal means.
+
+T50.lm <- lm(T50.mn ~ TempExpTime, data = T50metrics) # linear model
+T50.lmer <- lmer(T50.mn ~ TempExpTime + (1|PlantNr), data = T50metrics) # mixed model
+
+T50.emm <- emmeans(T50.lm, "TempExpTime") # lm emmeans
+T50.emm
+
+install.packages("pbkrtest")
+install.packages("lmerTest")
+T50.emm2 <- emmeans(T50.lmer, "TempExpTime") # mm emmeans
+T50.emm2
+
+## Generate compact letter displays using the cld() function
+multcomp::cld(T50.emm2, Letters = LETTERS)
+
+# NOTE: If two or more means share the same grouping symbol, then we cannot show them to be different. But we also did not show them to be the same.
+
+## Save as a data frame so we can create the CLD plot.
+cld_df <- multcomp::cld(T50.emm2, Letters = LETTERS)
+names(cld_df)
+
+## Now create the plot.
+ggplot(cld_df) +
+  aes(x = TempExpTime, y = emmean, color = TempExpTime) +
+  geom_point(position = position_dodge(width = 0.9)) +
+  geom_errorbar(mapping = aes(ymin = lower.CL, ymax = upper.CL), 
+                              position = position_dodge(width = 0.9),
+                width = 0.1) +
+  geom_text(mapping = aes(label = .group, y = upper.CL * 1.05), 
+            position = position_dodge(width = 0.9), 
+            show.legend = F)
+
+```
+
+#### Linear mixed models
+
+```{r}
+hist(T50metrics$T50.mn)  # seems close to a normal distribution - good!
+
+basic.lm <- lm(T50 ~ TempExpTime, data = T50_clean)
+summary(basic.lm)
+
+
+
+(prelim_plot <- ggplot(T50_clean, aes(x = TempExpTime, y = T50)) +
+  geom_point() +
+  geom_smooth(method = "lm"))
+  
+plot(basic.lm, which = 1)  # not perfect... 
+
+boxplot(T50 ~ PlantNr, data = T50_clean)  # certainly looks like something is going on here
+
+(colour_plot <- ggplot(T50_clean, aes(x = PlantNr, y = T50, colour = TempExpTime)) +
+  geom_point(size = 2) +
+  theme_classic() +
+  theme(legend.position = "none"))
+```
+
+```{r}
+library(lme4)
+
+mixed.lmer <- lmer(T50 ~ TempExpTime + (1|PlantNr), data = T50_clean)
+summary(mixed.lmer)
+```
+
+```{r}
+plot(mixed.lmer)  # looks alright, no patterns evident
+
+qqnorm(resid(mixed.lmer))
+qqline(resid(mixed.lmer))  # points fall nicely onto the line - good!
+```
+
+#### Original function for T50 metrics (with my own changes)
+
+```{r}
+library(car)
+```
+
+```{r}
+
+psiiht=function( Temperature, FvFm, control.temp, id, plot.est, boots){
+  l1=list(control.temp=control.temp, plot.est=plot.est, boots=boots)
+  attach(l1)
+  HTdf=data.frame(Temperature=Temperature, FvFm=FvFm, id=id)
+  
+ return(do.call("rbind", by(HTdf, list(HTdf$id), function(df){
+   Temperature=df[,which(colnames(df)=="Temperature")]
+   FvFm=df[,which(colnames(df)=="FvFm")]
+   id=df[,which(colnames(df)=="id")]
+   #get parameter estimates for logistic decay model
+   cof=coef(lm(logit(FvFm)~Temperature)) 
+   #Fit a non linear least squares model to the FvFm and Temperature data
+   HT.model <- nls(FvFm ~ theta1/(1 + exp(-(theta2 + theta3*Temperature))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
+                   trace=F, control=list(maxiter=1000, tol=1e-3))
+   
+   #Use the parameter estimates (coef(HT.model)[#])from the HT.model to predict a new fit based on a heat treatments from 23-62 degrees celcius. Here, # = 1:3.
+   y<-coef(HT.model)[1]/(1+exp(-(coef(HT.model)[2]+coef(HT.model)[3]*seq(23,62)))) 
+   
+   #Calculate half of the control Fv/Fm & a 95% reduction in FvFm with reference to control
+   half=mean(na.omit(FvFm[which(Temperature==control.temp)]))/2  
+   nine5=mean(na.omit(FvFm[which(Temperature==control.temp)]))*0.05  
+   #95 Confidence Interval
+   predict.boot=matrix(NA,40, boots)
+   T95=T50=Tcrit=c()
+   for(k in 1:boots){
+     #print(k)
+     srows <- sample(1:length(Temperature), length(Temperature),TRUE)
+     
+     if(class(try(nls(FvFm[srows] ~ theta1/(1 + exp(-(theta2 + theta3*Temperature[srows]))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
+                      trace=F, control=list(maxiter=1000, tol=1e-3)), silent=T)[[1]])=="nlsModel")
+     {HT.model2 <- nls(FvFm[srows] ~ theta1/(1 + exp(-(theta2 + theta3*Temperature[srows]))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
+                       trace=F, control=list(maxiter=1000, tol=1e-6))
+     predict.boot[,k]=coef(HT.model2)[1]/(1+exp(-(coef(HT.model2)[2]+coef(HT.model2)[3]*seq(23,62)))) 
+     #Estimate T95
+     T95[k]=(-log((coef(HT.model2)[1]/nine5)-1)-coef(HT.model2)[2])/coef(HT.model2)[3] 
+     
+     #Estimate T50
+     T50[k]=(-log((coef(HT.model2)[[1]]/half)-1)-coef(HT.model2)[[2]])/coef(HT.model2)[[3]]
+     T50k=(-log((coef(HT.model2)[[1]]/half)-1)-coef(HT.model2)[[2]])/coef(HT.model2)[[3]]
+     #Use model to predict changes in FvFm & make new dataframe
+     predict=data.frame(x=seq(23,62),y=coef(HT.model2)[1]/(1+exp(-(coef(HT.model2)[2]+coef(HT.model2)[3]*seq(23,62)))) ) #create a dataframe of predictions
+     df1=cbind(predict[-1,], predict[-nrow(predict),])[,c(3,1,4,2)]
+     #Use new dataframe to estimate the slope at between each 1-degree interval
+     df1$slp=as.vector(apply(df1, 1, function(x) summary(lm((x[3:4]) ~ x[1:2])) [[4]][[2]] ))
+     slp.at.tcrit=round(min(df1$slp), 3)*.15 #Determine where slope is 15% of max slope & round
+     #Estimate the FvFm at which the slope is 15% of max slope & less than T50
+     fvfv.at.tcrit=df1[which(abs(df1[which(df1[,1]<T50k),]$slp-slp.at.tcrit)==min(abs(df1[which(df1[,1]<T50k),]$slp-slp.at.tcrit))),][1,3]
+     Tcrit[k]=(-log((coef(HT.model2)[[1]]/fvfv.at.tcrit)-1)-coef(HT.model2)[[2]])/coef(HT.model2)[[3]] # Estimate the temperatureat which the slope is 15% of max slope
+     
+     }else{(class(try(nls(FvFm ~ theta1/(1 + exp(-(theta2 + theta3*Temperature))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
+                          data=data2[srows,], trace=F, control=list(maxiter=1000, tol=1e-3)), silent=T)[[1]])=="list")
+       predict.boot[,k]=NA
+       T95[k]=NA
+       T50[k]=NA
+       Tcrit[k]=NA }}
+   
+   FvFm.boot=t(apply(predict.boot, 1, function(x){quantile(x,c(0.025,0.975),na.rm=T)}))
+   
+   #Tcrit.ci=quantile(Tcrit,c(0.025,0.975),na.rm=T)
+   T50.ci=quantile(T50,c(0.025,0.975),na.rm=T)
+   #T95.ci=quantile(T95,c(0.025,0.975),na.rm=T)
+   
+   if(plot.est==T){ 
+     plot(NULL, NULL,xlab="Temperature",ylab="Fv/Fm",xlim=c(23,65),ylim=c(0,0.9), bty="l", lty=2)
+     text(22,0.3, pos=4, paste(unique(paste(id))), font=4)
+     points(Temperature, FvFm, xlab="Temperature", ylab="Fv/Fm",xlim=c(23,65), ylim=c(0,0.85), bty="l", lty=2, pch=5,  col="black")
+     lines(seq(23,62), y,lwd=1, col="black")
+     if(boots>1){
+     lines(seq(23,62), FvFm.boot[,1],lty=3, col="black")
+     lines(seq(23,62), FvFm.boot[,2],lty=3, col="black")
+     }
+     text(30,0, paste('Tcrit:', round(mean(na.omit(Tcrit)),1)), pos=4,col="light gray")
+     abline(v=round(mean(na.omit(Tcrit)),1), lty=2,lwd=1.5, col="light gray",  cex=0.8)
+     text(30,.1, paste('T50:',round(mean(na.omit(T50)),1)), pos=4, col="gray")
+     abline(v=round(mean(na.omit(T50)),1), lty=2,lwd=1.5, col="gray",cex=0.8)
+     text(30,.2, paste('T95:',round(mean(na.omit(T95)),1)),pos=4, col="black")
+     abline(v=round(mean(na.omit(T95)),1), lty=2,lwd=1.5, col="black", cex=0.8)
+   }
+   return(data.frame(id=(unique(id)), 
+                     #Tcrit.lci=round(Tcrit.ci[[1]],1),
+                     Tcrit.mn=round(mean(na.omit(Tcrit)),1),  
+                     #Tcrit.uci=round(Tcrit.ci[[2]],1),
+                     
+                     #T50.lci=round(T50.ci[[1]],1),
+                     T50.mn=round(mean(na.omit(T50)),1),  
+                     #T50.uci=round(T50.ci[[2]],1),
+                     
+                     #T95.lci=round(T95.ci[[1]],1),
+                     T95.mn=round(mean(na.omit(T95)),1)  
+                     #T95.uci=round(T95.ci[[2]],1)))
+   ))
+ })))
+  detach(l1)
+}
+
+
+## Prepare the dataset 
+DURIN_data$FvFm_Final <- as.numeric(as.character(DURIN_data$FvFm_Final))
+
+# Create concantenated ID code for the plants
+DURIN_Methods$PlantSampleID = paste("P", DURIN_Methods$plant_nr, "_T", DURIN_Methods$TempExpTime) ## plant before time
+
+DURIN_Methods$PlantSampleID = paste("T", DURIN_Methods$TempExpTime, "_P", DURIN_Methods$plant_nr) ## time before plant
+
+reform_dataset <- DURIN_Methods %>% 
+  dplyr::select(PlantSampleID, TempExp, FvFm_Final)
+
+## Run the function
+
+
+psiiht(Temperature=reform_dataset$TempExp, FvFm=reform_dataset$FvFm_Final, control.temp=20, id=reform_dataset$PlantSampleID, plot.est=T, boots=5) # call the function using the concatenated ID as the "id" argument
+
+T50_new_metrics <- psiiht(Temperature=DURIN_Methods$TempExp, FvFm=DURIN_Methods$FvFm_Final, control.temp=20, id=DURIN_Methods$TempExpTime, plot.est=T, boots=5)
+```
+
+#### Different treatment datasets
+
+```{r}
+## Run the function per each treatment (i. e. treatment T1 per all the 9 plants, treatment T5 per all the 9 plants, etc)
+
+# Step 0: convert the "id" column (which is going to be the PlantNr) into a factor
+
+DURIN_Methods$plant_nr <- as.factor(as.character(DURIN_Methods$plant_nr))
+str(DURIN_Methods)
+
+levels(DURIN_Methods$plant_nr)  # shows the different factor levels in their default order
+
+
+# Step 1: split the 5 different Time Treatment datasets
+
+T1_dataset <- DURIN_Methods %>% 
+  dplyr::filter(TempExpTime == "1") %>% 
+  dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %>% 
+  dplyr::rename(PlantNr = plant_nr)
+
+str(T1_dataset)
+
+T5_dataset <- DURIN_Methods %>% 
+  dplyr::filter(TempExpTime == "5") %>% 
+  dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %>% 
+  dplyr::rename(PlantNr = plant_nr)
+
+T10_dataset <- DURIN_Methods %>% 
+  dplyr::filter(TempExpTime == "10") %>% 
+  dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %>% 
+  dplyr::rename(PlantNr = plant_nr)
+
+T15_dataset <- DURIN_Methods %>% 
+  dplyr::filter(TempExpTime == "15") %>% 
+  dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %>% 
+  dplyr::rename(PlantNr = plant_nr)
+
+T20_dataset <- DURIN_Methods %>% 
+  dplyr::filter(TempExpTime == "20") %>% 
+  dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %>% 
+  dplyr::rename(PlantNr = plant_nr)
+
+
+# Step 2: call the function per each dataset (id is going to be the PlantNr)
+
+T1_metrics <- psiiht(Temperature=T1_dataset$TempExp, FvFm=T1_dataset$FvFm_Final, control.temp=20, id=T1_dataset$PlantNr, plot.est=T, boots=5)
+
+T5_metrics <- psiiht(Temperature=T5_dataset$TempExp, FvFm=T5_dataset$FvFm_Final, control.temp=20, id=T5_dataset$PlantNr, plot.est=T, boots=5)
+
+T10_metrics <- psiiht(Temperature=T10_dataset$TempExp, FvFm=T10_dataset$FvFm_Final, control.temp=20, id=T10_dataset$PlantNr, plot.est=T, boots=10)
+
+T15_metrics <- psiiht(Temperature=T15_dataset$TempExp, FvFm=T15_dataset$FvFm_Final, control.temp=20, id=T15_dataset$PlantNr, plot.est=T, boots=9)
+
+T20_metrics <- psiiht(Temperature=T20_dataset$TempExp, FvFm=T20_dataset$FvFm_Final, control.temp=20, id=T20_dataset$PlantNr, plot.est=T, boots=5)
+
+# Step 2B: call the function (modified by DURIN) per each dataset (id is going to be the PlantNr)
+
+T5_metrics <- psiiht.durin(Temperature=T5_dataset$TempExp, FvFm=T5_dataset$FvFm_Final, control.temp=20, id=T5_dataset$PlantNr, TempExpTime=T5_dataset$TempExpTime, plot.est=T, boots=3)
+
+T10_metrics <- psiiht.durin(Temperature=T10_dataset$TempExp, FvFm=T10_dataset$FvFm_Final, control.temp=20, id=T10_dataset$PlantNr, TempExpTime=T10_dataset$TempExpTime, plot.est=T, boots=3)
+
+T15_metrics <- psiiht.durin(Temperature=T15_dataset$TempExp, FvFm=T15_dataset$FvFm_Final, control.temp=20, id=T15_dataset$PlantNr, plot.est=T, boots=3)
+
+T20_metrics <- psiiht.durin(Temperature=T20_dataset$TempExp, FvFm=T20_dataset$FvFm_Final, control.temp=20, id=T20_dataset$PlantNr, TempExpTime=T20_dataset$TempExpTime, plot.est=T, boots=3)
+
+
+```
