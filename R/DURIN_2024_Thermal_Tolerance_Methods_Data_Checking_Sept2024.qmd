@@ -101,7 +101,7 @@ DURIN_TT %>%
 
 # 
 
-# Using Feeley and Perez Function For Calculating T50 
+# Using Feeley and Perez Function For Calculating T50
 
 ```{r}
 
