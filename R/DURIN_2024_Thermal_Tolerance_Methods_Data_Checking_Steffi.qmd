@@ -1729,6 +1729,109 @@ T50_estimates_DURIN.2_safe <- T50_estimates_DURIN.2_safe %>%
 ```
 
 ```{r}
+psiiht.2_summary_safe2 <- function(Temperature, FvFm, control.temp, id, site, plot.est, boots) {
+  l1 <- list(control.temp = control.temp, plot.est = plot.est, boots = boots)
+  HTdf <- data.frame(Temperature = Temperature, FvFm = FvFm, id = id, site = site)
+
+  # Create full bootstrapped estimates dataframe
+  boot_results <- data.frame(id = character(), site = character(), boot_iteration = integer(),
+                             T50 = numeric(), failure_reason = character(), stringsAsFactors = FALSE)
+
+  by(HTdf, list(HTdf$id, HTdf$site), function(df) {
+    Temperature <- df$Temperature
+    FvFm <- df$FvFm
+    id <- df$id
+    site <- df$site
+
+    failure_reason <- NA
+    custom_logit <- function(p) {
+      p[p == 0] <- 0.001
+      p[p == 1] <- 0.999
+      return(log(p / (1 - p)))
+    }
+
+    logit_FvFm <- custom_logit(FvFm)
+    cof <- tryCatch(coef(lm(logit_FvFm ~ Temperature)), error = function(e) NULL)
+
+    if (is.null(cof)) {
+      failure_reason <- "Failed to compute logistic regression coefficients"
+    }
+
+    start_params <- list(theta1 = max(FvFm), theta2 = cof[1], theta3 = cof[2])
+
+    # Bootstrap loop
+    T50_values <- numeric(boots)
+
+    for (k in 1:boots) {
+      srows <- sample(1:length(Temperature), length(Temperature), TRUE)
+      boot_fit <- tryCatch({
+        nls(FvFm[srows] ~ theta1 / (1 + exp(-(theta2 + theta3 * Temperature[srows]))),
+            start = start_params, algorithm = "port", control = list(maxiter = 1000, tol = 1e-3))
+      }, error = function(e) { return(NULL) })
+
+      if (!is.null(boot_fit)) {
+        T50_values[k] <- (-log((coef(boot_fit)[1] / (max(FvFm) / 2)) - 1) - coef(boot_fit)[2]) / coef(boot_fit)[3]
+      } else {
+        T50_values[k] <- NA
+      }
+
+      boot_results <<- rbind(boot_results, data.frame(
+        id = unique(id), site = unique(site), boot_iteration = k, T50 = T50_values[k],
+        failure_reason = ifelse(is.na(T50_values[k]), "Bootstrap iteration failed", NA)
+      ))
+    }
+  })
+
+  # Compute summary statistics per id
+  summary_df <- boot_results %>%
+    dplyr::group_by(id, site) %>%
+    dplyr::summarize(
+      n_boots = sum(!is.na(T50)),  # Count of successful bootstraps
+      mean_T50 = mean(T50, na.rm = TRUE),
+      sd_T50 = sd(T50, na.rm = TRUE),
+      se_T50 = sd(T50, na.rm = TRUE) / sqrt(n_boots)
+    ) %>%
+    dplyr::ungroup()
+
+  return(summary_df)  # Summary dataframe per id
+}
+
+
+
+# Run the function with diagnostics and saved plots
+T50_estimates_DURIN_safe2 <- psiiht.2_summary_safe2(Temperature = DURIN_TT_HOT_Filt_loop$TempExp,
+                                       site = DURIN_TT_HOT_Filt_loop$siteID,
+                                       FvFm = DURIN_TT_HOT_Filt_loop$Filtered_FvFm,
+                                       control.temp = 30,
+                                       id = DURIN_TT_HOT_Filt_loop$PlantSampleID,
+                                       plot.est = TRUE,
+                                       boots = 1000)
+
+# Print saved results table
+print(T50_estimates_DURIN_safe2)
+
+
+T50_estimates_DURIN_safe2 <- T50_estimates_DURIN_safe2 %>% 
+  separate(id, "_",
+           into = c("siteID", "habitat", "species"),
+           remove = FALSE)
+
+
+(T50_plot2 <- ggplot(T50_estimates_DURIN_safe2, aes(x = siteID, y = mean_T50,
+                                            color = habitat)) +
+                 geom_point(size = 3) +
+                 geom_errorbar(aes(ymin = mean_T50 - se_T50, ymax = mean_T50 + se_T50)) +
+    # Some estiamtes are very wronge, i.e. around 10 degrees, for now restrict the y axis to eliminate those
+                 ylim(30,55) +
+                 facet_grid(. ~ species) +
+                 scale_color_manual(values = Habitat) +  
+                 labs(x = "Habitat",
+                      y = "T50 of Fv/Fm (ºC)",
+                      color = "Species") + 
+                 theme_bw())
+```
+
+```{r}
 psiiht.3 <- function(Temperature, FvFm, control.temp, habitat, siteID, species, plot.est, boots) {
   # Create dataframe with relevant variables
   HTdf <- data.frame(Temperature = Temperature, FvFm = FvFm, habitat = habitat, siteID = siteID, species = species)
