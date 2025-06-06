@@ -1,0 +1,225 @@
+---
+title: "Testing Thermal Tolerance Ideas"
+format: html
+editor: visual
+---
+
+```{r}
+
+
+```
+
+```{r}
+# Load necessary libraries
+library(drc)
+library(ggplot2)
+library(tidyverse)
+
+# Generate a more realistic dataset
+set.seed(123)
+data <- expand.grid(
+  species = c("VV", "VM"),
+  individual = 1:5,
+  temperature = c(20, 30, 34, 38, 42, 46, 50, 54),
+  exposure_time = c(5, 10, 15, 20)
+)
+
+data <- data %>%
+  mutate(FvFm = case_when(
+    temperature == 20 ~ runif(1, 0.75, 0.8),
+    temperature == 30 ~ runif(1, 0.75, 0.8),
+    temperature == 34 ~ runif(1, 0.7, 0.75),
+    temperature == 38 ~ runif(1, 0.65, 0.7),
+    temperature == 42 ~ runif(1, 0.6, 0.65),
+    temperature == 46 ~ runif(1, 0.55, 0.6),
+    temperature == 50 ~ runif(1, 0.1, 0.2),
+    temperature == 54 ~ runif(1, 0, 0.05)
+  ))
+
+# Fit the four-parameter logistic model for each species
+fit_model <- function(species_data) {
+  drm(FvFm ~ temperature, data = species_data, fct = LL.4(names = c("Slope", "Lower", "Upper", "ED50")))
+}
+
+# Predict T50 and T95
+predict_ED <- function(model) {
+  ED(model, c(50, 95))
+}
+
+# Calculate TCrit
+calculate_TCrit <- function(model, max_FvFm) {
+  T50 <- ED(model, 50)[1]
+  slope <- coef(model)[1]
+  intercept <- max_FvFm - slope * T50
+  TCrit <- (max_FvFm - intercept) / slope
+  return(TCrit)
+}
+
+# Apply the model fitting and predictions for each species
+results <- data.frame()
+for (species in unique(data$species)) {
+  species_data <- filter(data, species == !!species)
+  model <- fit_model(species_data)
+  max_FvFm <- max(species_data$FvFm)
+  ED_values <- predict_ED(model)
+  TCrit <- calculate_TCrit(model, max_FvFm)
+  
+  results <- bind_rows(results, data.frame(
+    species = species,
+    T50 = ED_values[1],
+    T95 = ED_values[2],
+    TCrit = TCrit
+  ))
+}
+
+# Plotting the results
+ggplot(data, aes(x = temperature, y = FvFm, color = as.factor(exposure_time))) +
+  geom_point() +
+  geom_smooth(method = "nls", formula = y ~ SSlogis(x, Asym, xmid, scal), se = FALSE) +
+  facet_wrap(~ species) +
+  geom_vline(data = results, aes(xintercept = T50, color = "T50"), linetype = "dashed") +
+  geom_vline(data = results, aes(xintercept = T95, color = "T95"), linetype = "dotted") +
+  geom_vline(data = results, aes(xintercept = TCrit, color = "TCrit"), linetype = "solid") +
+  labs(color = "Exposure Time") +
+  theme_minimal() +
+  scale_color_manual(values = c("T50" = "blue", "T95" = "red", "TCrit" = "green"))
+
+
+```
+
+```{r}
+# Load necessary libraries
+library(drc)
+library(ggplot2)
+library(tidyverse)
+library(boot)
+
+# Generate a more realistic dataset
+set.seed(123)
+data <- expand.grid(
+  species = c("VV", "VM"),
+  individual = 1:5,
+  temperature = c(20, 30, 34, 38, 42, 46, 50, 54),
+  exposure_time = c(5, 10, 15, 20)
+)
+
+data <- data %>%
+  mutate(FvFm = case_when(
+    temperature == 20 ~ runif(1, 0.75, 0.8),
+    temperature == 30 ~ runif(1, 0.75, 0.8),
+    temperature == 34 ~ runif(1, 0.7, 0.75),
+    temperature == 38 ~ runif(1, 0.65, 0.7),
+    temperature == 42 ~ runif(1, 0.6, 0.65),
+    temperature == 46 ~ runif(1, 0.55, 0.6),
+    temperature == 50 ~ runif(1, 0.1, 0.2),
+    temperature == 54 ~ runif(1, 0, 0.05)
+  ))
+
+# Fit the four-parameter logistic model for each individual
+fit_model <- function(individual_data) {
+  drm(FvFm ~ temperature, data = individual_data, fct = LL.4(names = c("Slope", "Lower", "Upper", "ED50")))
+}
+
+# Predict T50 and T95
+predict_ED <- function(model) {
+  ED(model, c(50, 95))
+}
+
+# Calculate TCrit
+calculate_TCrit <- function(model, max_FvFm) {
+  T50 <- ED(model, 50)[1]
+  slope <- coef(model)[1]
+  intercept <- max_FvFm - slope * T50
+  TCrit <- (max_FvFm - intercept) / slope
+  return(TCrit)
+}
+
+# Bootstrap function to estimate T50, T95, and TCrit
+bootstrap_estimates <- function(data, indices) {
+  d <- data[indices, ]
+  model <- fit_model(d)
+  max_FvFm <- max(d$FvFm)
+  ED_values <- predict_ED(model)
+  TCrit <- calculate_TCrit(model, max_FvFm)
+  return(c(T50 = ED_values[1], T95 = ED_values[2], TCrit = TCrit))
+}
+
+# Apply the model fitting and predictions for each individual
+results <- data.frame()
+for (species in unique(data$species)) {
+  for (exposure_time in unique(data$exposure_time)) {
+    for (individual in unique(data$individual)) {
+      individual_data <- filter(data, species == !!species, exposure_time == !!exposure_time, individual == !!individual)
+      model <- fit_model(individual_data)
+      max_FvFm <- max(individual_data$FvFm)
+      ED_values <- predict_ED(model)
+      TCrit <- calculate_TCrit(model, max_FvFm)
+      
+      results <- bind_rows(results, data.frame(
+        species = species,
+        exposure_time = exposure_time,
+        individual = individual,
+        T50 = ED_values[1],
+        T95 = ED_values[2],
+        TCrit = TCrit
+      ))
+    }
+  }
+}
+
+# Bootstrap estimates for each species and exposure time
+bootstrap_results <- data.frame()
+for (species in unique(data$species)) {
+  for (exposure_time in unique(data$exposure_time)) {
+    species_data <- filter(data, species == !!species, exposure_time == !!exposure_time)
+    boot_estimates <- boot(data = species_data, statistic = bootstrap_estimates, R = 1000)
+    boot_summary <- data.frame(
+      species = species,
+      exposure_time = exposure_time,
+      T50_mean = mean(boot_estimates$t[, 1]),
+      T50_ci_lower = quantile(boot_estimates$t[, 1], 0.025),
+      T50_ci_upper = quantile(boot_estimates$t[, 1], 0.975),
+      T95_mean = mean(boot_estimates$t[, 2]),
+      T95_ci_lower = quantile(boot_estimates$t[, 2], 0.025),
+      T95_ci_upper = quantile(boot_estimates$t[, 2], 0.975),
+      TCrit_mean = mean(boot_estimates$t[, 3]),
+      TCrit_ci_lower = quantile(boot_estimates$t[, 3], 0.025),
+      TCrit_ci_upper = quantile(boot_estimates$t[, 3], 0.975)
+    )
+    bootstrap_results <- bind_rows(bootstrap_results, boot_summary)
+  }
+}
+
+# Plotting the results
+ggplot(data, aes(x = temperature, y = FvFm, color = as.factor(exposure_time))) +
+  geom_point() +
+  geom_smooth(method = "nls", formula = y ~ SSlogis(x, Asym, xmid, scal), se = FALSE) +
+  facet_wrap(~ species) +
+  geom_vline(data = results, aes(xintercept = T50, color = "T50"), linetype = "dashed") +
+  geom_vline(data = results, aes(xintercept = T95, color = "T95"), linetype = "dotted") +
+  geom_vline(data = results, aes(xintercept = TCrit, color = "TCrit"), linetype = "solid") +
+  labs(color = "Exposure Time") +
+  theme_minimal() +
+  scale_color_manual(values = c("T50" = "blue", "T95" = "red", "TCrit" = "green")) +
+  ggtitle("Thermal Tolerance Curves with T50, T95, and TCrit")
+
+# Plotting bootstrap results
+ggplot(bootstrap_results, aes(x = exposure_time, y = T50_mean, color = species)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = T50_ci_lower, ymax = T50_ci_upper), width = 0.2) +
+  labs(title = "Bootstrap Estimates of T50", y = "T50 (°C)", x = "Exposure Time (minutes)") +
+  theme_minimal()
+
+ggplot(bootstrap_results, aes(x = exposure_time, y = T95_mean, color = species)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = T95_ci_lower, ymax = T95_ci_upper), width = 0.2) +
+  labs(title = "Bootstrap Estimates of T95", y = "T95 (°C)", x = "Exposure Time (minutes)") +
+  theme_minimal()
+
+ggplot(bootstrap_results, aes(x = exposure_time, y = TCrit_mean, color = species)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = TCrit_ci_lower, ymax = TCrit_ci_upper), width = 0.2) +
+  labs(title = "Bootstrap Estimates of TCrit", y = "TCrit (°C)", x = "Exposure Time (minutes)") +
+  theme_minimal()
+
+```
