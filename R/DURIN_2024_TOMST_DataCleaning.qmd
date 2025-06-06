@@ -142,8 +142,15 @@ localities = as.vector(names(tms$localities))
 tms <- mc_prep_crop(tms, start = start_t, end = NULL, localities)
 tms.info <- mc_info_clean(tms)
 
-
-
+# Seems to be some issue with 'steps', locality 95221022 has 60, whilst others have 900. Remove?
+# Also, earlier we had some instances of loggers with old and new, so remove those too for now
+# 95221030 Problematic interval: 2024-05-28 UTC--2024-06-05 09:15:00 UTC
+# 95221057 Problematic interval: 2024-05-28 UTC--2024-06-05 09:15:00 UTC
+# 95221153 Problematic interval: 2024-05-28 UTC--2024-06-05 09:15:00 UTC
+tms.filt <- mc_filter(tms, localities = "95221022", reverse = T)
+  tms.filt <- mc_filter(tms.filt, localities = "95221030", reverse = T)
+  tms.filt <- mc_filter(tms.filt, localities =  "95221057", reverse = T)
+  tms.filt <- mc_filter(tms.filt, localities = "95221153", reverse = T)
 ```
 
 ## Data extraction
@@ -153,7 +160,7 @@ tms.info <- mc_info_clean(tms)
 ```{r calculation for all the sites}
 
 ## calculate virtual sensor VWC from raw TMS moisture signal
-tms.all.calc <- mc_calc_vwc(tms, soiltype = "universal") #reseach on soiltype and TOMST VERSION
+tms.all.calc <- mc_calc_vwc(tms.filt, soiltype = "universal") #reseach on soiltype and TOMST VERSION
 
 ## virtual sensor with growing and freezing degree days
 tms.all.calc <- mc_calc_gdd(tms.all.calc, sensor = "TMS_T3",)
@@ -174,10 +181,17 @@ tms.snow <- active_metadata |>
   summarise(mean_snow_days = mean(snow_days),
             first_day = mean.Date(first_day, na.rm = TRUE),
             last_day = mean.Date(last_day, na.rm = TRUE))
+
+
+
  
-temp_env_all  <-tms |> 
+temp_env_all  <- tms.filt |> 
   mc_env_temp(period = "week", min_coverage = 0.9) |> 
-  filter(value >= -30 & value <= 50)
+  filter(value >= -40 & value <= 50)
+
+temp_env_all_daily  <- tms.filt |> 
+  mc_env_temp(period = "day", min_coverage = 0.9) |> 
+  filter(value >= -50 & value <= 50)
 
 moist_env_all <- mc_env_moist(tms.all.calc, period = "week", min_coverage = 0.9)
 snow_all <- tms.all.calc |> 
@@ -366,7 +380,8 @@ f_line_macro_1 <-ggplot(moist.mean.all, aes(x = datetime, y = mean.moist, color 
     plot.caption = element_text(size = 14),
     legend.text = element_text(size = 12)
   ) +
-   theme(legend.position = "bottom")
+   theme(legend.position = "bottom") +
+  theme_classic()
 
 print(f_line_macro_1)
 
@@ -385,7 +400,8 @@ f_line_macro_2 <-ggplot(temp.mean.all, aes(x = datetime, y = mean.temp.air, colo
     plot.caption = element_text(size = 14),
     legend.text = element_text(size = 12)
   ) +
-   theme(legend.position = "bottom")
+   theme(legend.position = "bottom") +
+  theme_classic()
 
 print(f_line_macro_2)
 
@@ -410,7 +426,8 @@ print(f_line_macro_2)
     plot.caption = element_text(size = 14),
     legend.text = element_text(size = 12)
   ) +
-   theme(legend.position = "bottom")
+   theme(legend.position = "bottom") +
+  theme_classic()
 
 print(f_line_micro_1)
 
@@ -432,7 +449,8 @@ f_line_micro_2 <-ggplot(temp.mean.all.hab, aes(x = datetime, y = mean.temp.air.h
     plot.subtitle = element_text(size = 14),
     plot.caption = element_text(size = 14),
     legend.text = element_text(size = 12)
-  ) 
+  ) +
+  theme_classic()
 
 print(f_line_micro_2)
 
@@ -465,7 +483,8 @@ f_line_micro_3 <-ggplot(snow.mean.all, aes(x = datetime, y = snow.hab))+
     plot.subtitle = element_text(size = 14),
     plot.caption = element_text(size = 14),
     legend.text = element_text(size = 12)
-  ) 
+  ) +
+  theme_classic()
 
 print(f_line_micro_3)
 
@@ -553,7 +572,8 @@ f_line_micro_4 <- ggplot() +
     plot.subtitle = element_text(size = 14),
     plot.caption = element_text(size = 14),
     legend.text = element_text(size = 12)
-  ) 
+  ) +
+  theme_classic()
 
 print(f_line_micro_4)
 
@@ -588,7 +608,8 @@ f_histo_micro <- ggplot() +
     plot.subtitle = element_text(size = 14),
     plot.caption = element_text(size = 14),
     legend.text = element_text(size = 12)
-  ) 
+  ) +
+  theme_classic()
 
 
 
@@ -619,11 +640,12 @@ f_line_micro_5 <- ggplot() +
     plot.subtitle = element_text(size = 14),
     plot.caption = element_text(size = 14),
     legend.text = element_text(size = 12)
-  ) 
+  ) +
+  theme_classic()
 
 print(f_line_micro_5)
 
-fig_save <- "D:/Utilisateurs/Touriere/Documents/GEN/4A/SIRD/Rapport/Images/R"
+#fig_save <- "D:/Utilisateurs/Touriere/Documents/GEN/4A/SIRD/Rapport/Images/R"
 
 join_macro <- ggarrange(
   f_line_macro_1, f_line_macro_2,
@@ -649,7 +671,140 @@ join_micro <- ggarrange(
 
 join_micro
 
-ggsave(filename = paste0(fig_save, "/micro_comp.png"), plot = join_micro, width = 10, height = 12, units = "in", dpi = 300)
+#ggsave(filename = paste0(fig_save, "/micro_comp.png"), plot = join_micro, width = 10, height = 12, units = "in", dpi = 300)
+```
+
+### Filtering metadata by site: Lygra, Sogndal, Kautokeino, Senja
+
+```{r filtering by site}
+
+site <- list(unique(active_metadata$site))
+
+#filtering to only have data from lygra
+ly_metadata <- active_metadata |> 
+  filter(site == "Lygra") 
+
+ly_metadata <-list("all_serial" = ly_metadata$loggerID,
+                "Open"=filter(ly_metadata,land_type == "Open")$loggerID,
+              "Forested"=filter(ly_metadata,land_type == "Forested")$loggerID,
+           "DroughtNet"=filter(ly_metadata,land_type == "DroughtNet")$loggerID)
+  
+#filtering to only have data from sogndal
+so_metadata <- active_metadata |> 
+  filter(site == "Sogndal") 
+
+so_metadata <-list("all_serial"=so_metadata$loggerID,
+                "Open"=filter(so_metadata,land_type == "Open")$loggerID,
+              "Forested"=filter(so_metadata,land_type == "Forested")$loggerID)
+  
+#filtering to only have data from Senja
+se_metadata <- active_metadata |> 
+  filter(site == "Senja") 
+
+se_metadata <-list("all_serial"=se_metadata$loggerID,
+                "Open"=filter(se_metadata,land_type == "Open")$loggerID,
+              "Forested"=filter(se_metadata,land_type == "Forested")$loggerID)
+ 
+#filtering to only have data from Kautokeino
+ka_metadata <- active_metadata |> 
+  filter(site == "Kautokeino") 
+
+ka_metadata <-list("all_serial"=ka_metadata$loggerID,
+                "Open"=filter(ka_metadata,land_type == "Open")$loggerID,
+              "Forested"=filter(ka_metadata,land_type == "Forested")$loggerID)
+```
+
+### Filtering data by habitat : open vs forested (or DroughNet) for each site
+
+```{r Data from lygra}
+#filtering data for lygra
+if(length(unique(ly_metadata$all_serial))!=0)
+{
+tms.ly  <- tms |> 
+  mc_filter( localities = ly_metadata$all_serial, reverse = F)
+}
+
+if(length(unique(ly_metadata$Open))!=0) 
+{
+tms.ly.open <- tms |> 
+  mc_filter( localities = ly_metadata$Open, reverse = F)
+}
+
+if(length(unique(ly_metadata$Forested))!=0) 
+{
+tms.ly.forested <- tms |> 
+  mc_filter( localities = ly_metadata$Forested, reverse = F)
+}
+
+
+
+# if(length(unique(ly_metadata$DroughtNet))!=0)
+# {
+# tms.ly.DroughtNet <- tms |>
+#   mc_filter( localities = ly_metadata$DroughtNet, reverse = F)
+# 
+# tms.ly.DroughtNet.90 <- tms |>
+#   mc_filter( localities = ly_metadata$DroughtNet, reverse = F) |>
+#   mc_filter(localities = filter(active_metadata, drt_treatment == "90")$loggerID)
+# 
+# tms.ly.DroughtNet.0 <- tms |>
+#   mc_filter( localities = ly_metadata$DroughtNet, reverse = F) |>
+#   mc_filter(localities = filter(active_metadata, drt_treatment == "0")$loggerID)
+# }
+
+
+#filtering data from Sogndal
+if(length(unique(so_metadata$all_serial))!=0)
+{
+tms.so  <- tms |> 
+  mc_filter( localities = so_metadata$all_serial, reverse = F)
+}
+if(length(unique(so_metadata$Open))!=0) 
+{
+tms.so.open <- tms |> 
+  mc_filter( localities = so_metadata$Open, reverse = F)
+}
+if(length(unique(so_metadata$Forested))!=0) 
+{
+tms.so.forested <- tms |> 
+  mc_filter( localities = so_metadata$Forested, reverse = F)
+}
+
+#filtering data for Senja
+if(length(unique(se_metadata$all_serial))!=0)
+{
+tms.se  <- tms |> 
+  mc_filter( localities = se_metadata$all_serial, reverse = F)
+}
+
+if(length(unique(se_metadata$Open))!=0) 
+{
+tms.se.open <- tms |> 
+  mc_filter( localities = se_metadata$Open, reverse = F)
+}
+if(length(unique(se_metadata$Forested))!=0) 
+{
+tms.se.forested <- tms |> 
+  mc_filter( localities = se_metadata$Forested, reverse = F)
+}
+
+#filtering data for Kautokeino
+if(length(unique(ka_metadata$all_serial))!=0)
+{
+tms.ka  <- tms |> 
+  mc_filter( localities = ka_metadata$all_serial, reverse = F)
+}
+
+if(length(unique(ka_metadata$Open))!=0) 
+{
+tms.ka.open <- tms |> 
+  mc_filter( localities = ka_metadata$Open, reverse = F)
+}
+if(length(unique(ka_metadata$Forested))!=0) 
+{
+tms.ka.forested <- tms |> 
+  mc_filter( localities = ka_metadata$Forested, reverse = F)
+}
 ```
 
 ## Lygra
@@ -842,7 +997,7 @@ fdd.mean.ly.DN.90 <-  mutate(fdd.mean.ly.DN.90,
 
 ```
 
-## Microclimat analysis for Lygra
+## Microclimate analysis for Lygra
 
 ### Plot for the comparison
 
@@ -852,20 +1007,22 @@ p.moist.1 <- ggplot() +
   geom_line(data = moist.mean.ly.open, aes(x = datetime, y = avg_value), color = "blue") +
 
   geom_line(data = moist.mean.ly.forested, aes(x = datetime, y = avg_value), color = "red") +
-    geom_line(data = moist.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
+    # geom_line(data = moist.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
   
-  labs(title = " Microclimatic omparison", x = "Time", y = "Moist") +
+  labs(title = "Soil Moisture", x = "Time", y = "Soil Moisture Content") +
   theme(legend.position = c(x = 0.99, y = 0.01),
-    legend.justification = c(x = "right", y = "bottom"))
+    legend.justification = c(x = "right", y = "bottom")) + 
+  theme_classic()
 
 p.moist.2 <- ggplot() +
   geom_line(data = moist.mean.ly.open, aes(x = datetime, y = avg_value, color = "Open habitat")) +
   geom_line(data = moist.mean.ly.forested, aes(x = datetime, y = avg_value, color = "Forested habitat")) +
-    geom_line(data = moist.mean.ly.DN.90, aes(x = datetime, y = avg_value, color = "DroughtNet 90%")) +
+    # geom_line(data = moist.mean.ly.DN.90, aes(x = datetime, y = avg_value, color = "DroughtNet 90%")) +
   labs(title = "Graphique en ligne du temps vs valeur", x = "Temps", y = "Valeur", color = "Habitat Type") +
-  scale_color_manual(values = c("Open habitat" = "blue", "Forested habitat" = "red","DroughtNet 90%" = "green")) +
+  scale_color_manual(values = c("Open habitat" = "blue", "Forested habitat" = "red")) #,"DroughtNet 90%" = "green")) +
   
-  theme(plot.title = element_text(hjust = 0.5))
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme_classic()
 
 p.moist.1
 p.moist.2
@@ -877,11 +1034,12 @@ p.temp.1 <- ggplot() +
   geom_line(data = temp.mean.ly.open, aes(x = datetime, y = avg_value), color = "blue") +
 
   geom_line(data = temp.mean.ly.forested, aes(x = datetime, y = avg_value), color = "red") +
-  geom_line(data = temp.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
+  # geom_line(data = temp.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
   
-  labs(title = " Microclimatic comparison", x = "Time", y = "Temperature") +
+  labs(title = "Mean Temperature", x = "Time", y = "Temperature") +
   theme(legend.position = c(x = 0.99, y = 0.01),
-    legend.justification = c(x = "right", y = "bottom"))
+    legend.justification = c(x = "right", y = "bottom")) + 
+  theme_classic()
 
 p.temp.1
 ```
@@ -891,11 +1049,12 @@ p.gdd.1 <- ggplot() +
   geom_line(data = gdd.mean.ly.open, aes(x = datetime, y = avg_value), color = "blue") +
 
   geom_line(data = gdd.mean.ly.forested, aes(x = datetime, y = avg_value), color = "red") +
-  geom_line(data = gdd.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
+  # geom_line(data = gdd.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
   
-  labs(title = " Microclimatic comparison", x = "Time", y = "Temperature") +
+  labs(title = "Growing Degree Days", x = "Time", y = "Days") +
   theme(legend.position = c(x = 0.99, y = 0.01),
-    legend.justification = c(x = "right", y = "bottom"))
+    legend.justification = c(x = "right", y = "bottom")) + 
+  theme_classic()
 
 p.gdd.1
 
@@ -906,11 +1065,12 @@ p.fdd.1 <- ggplot() +
   geom_line(data = fdd.mean.ly.open, aes(x = datetime, y = avg_value), color = "blue") +
 
   geom_line(data = fdd.mean.ly.forested, aes(x = datetime, y = avg_value), color = "red") +
-  geom_line(data = fdd.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
+  # geom_line(data = fdd.mean.ly.DN.90, aes(x = datetime, y = avg_value), color = "green") +
   
-  labs(title = " Microclimatic comparison", x = "Time", y = "Temperature") +
+  labs(title = "Freezing Days", x = "Time", y = "Temperature") +
   theme(legend.position = c(x = 0.99, y = 0.01),
-    legend.justification = c(x = "right", y = "bottom"))
+    legend.justification = c(x = "right", y = "bottom")) + 
+  theme_classic()
 
 p.fdd.1
 ```
@@ -935,8 +1095,1196 @@ final_plot
 
 ```
 
-## Macroclimat analysis (between sites)
+# Function version of it
 
 ```{r}
-#PCA ??
+library(ggplot2)
+library(cowplot)
+
+create_plot <- function(data_open, data_forested, title, y_label, colors) {
+  p <- ggplot() +
+    geom_line(data = data_open, aes(x = datetime, y = avg_value, color = "Open")) +
+    geom_line(data = data_forested, aes(x = datetime, y = avg_value, color = "Forested")) +
+    scale_color_manual(values = colors) +
+    labs(title = title, x = "Time", y = y_label, color = "Site Type") +
+    theme_classic() +
+    theme(legend.position = "bottom")  # Ensuring the legend is positioned below
+  
+  return(p)
+}
+
+create_four_panel_plot <- function(dataset_list, colors) {
+  # Create individual plots
+  p.moist <- create_plot(dataset_list$moist_open, dataset_list$moist_forested, "Soil Moisture", "Soil Moisture Content", colors)
+  p.temp <- create_plot(dataset_list$temp_open, dataset_list$temp_forested, "Mean Temperature", "Temperature", colors)
+  p.gdd <- create_plot(dataset_list$gdd_open, dataset_list$gdd_forested, "Growing Degree Days", "Days", colors)
+  p.fdd <- create_plot(dataset_list$fdd_open, dataset_list$fdd_forested, "Freezing Days", "Temperature", colors)
+
+  # Combine the plots into a grid
+  combined_plot <- plot_grid(p.moist + theme(legend.position = "none"), 
+                             p.temp + theme(legend.position = "none"),
+                             p.gdd + theme(legend.position = "none"), 
+                             p.fdd + theme(legend.position = "none"), 
+                             ncol = 2, labels = "AUTO")
+
+  # Extract the shared legend from one plot (since all plots have the same legend)
+  legend <- get_legend(p.moist)
+
+  # Stack the four-panel figure on top of the shared legend
+  final_plot <- plot_grid(
+    combined_plot,
+    legend,
+    ncol = 1,  # Placing legend below by stacking plots in one column
+    rel_heights = c(1, 0.1)  # Making the legend smaller relative to the plots
+  )
+  
+  return(final_plot)
+}
+
+# Define your custom color palette
+custom_colors <- c("Forested" = "#083508", "Open" = "#589758")  # Replace these with any colors you prefer
+
+
+# Example usage:
+dataset_list <- list(
+  moist_open = moist.mean.ly.open,
+  moist_forested = moist.mean.ly.forested,
+  temp_open = temp.mean.ly.open,
+  temp_forested = temp.mean.ly.forested,
+  gdd_open = gdd.mean.ly.open,
+  gdd_forested = gdd.mean.ly.forested,
+  fdd_open = fdd.mean.ly.open,
+  fdd_forested = fdd.mean.ly.forested
+)
+
+(final_plot2 <- create_four_panel_plot(dataset_list, custom_colors))
+
+```
+
+## Macroclimate analysis (between sites)
+
+```{r}
+# Sogndal Datasets
+#mean moisture
+moist.mean.so.forested <- tms.so.forested |> 
+   mc_calc_vwc( soiltype = "universal") |> 
+   mc_env_moist(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+moist.mean.so.forested <-  mutate(moist.mean.so.forested,avg_value = rowMeans(select(moist.mean.so.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+
+#mean temperature at 15cm
+temp.mean.so.forested <- tms.so.forested |> 
+   mc_env_temp(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.air_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+temp.mean.so.forested <-  mutate(temp.mean.so.forested,
+                              avg_value = rowMeans(select(temp.mean.so.forested, -datetime, -sensor_name), na.rm = TRUE))
+  
+
+#mean gdd number
+gdd.mean.so.forested <- tms.so.forested |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.GDD5") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+gdd.mean.so.forested <-  mutate(gdd.mean.so.forested,
+                              avg_value = rowMeans(select(gdd.mean.so.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+#mean frost days number
+fdd.mean.so.forested <- tms.so.forested |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.FDD0") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+fdd.mean.so.forested <-  mutate(fdd.mean.so.forested,
+                              avg_value = rowMeans(select(fdd.mean.so.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+
+# Senja Datasets
+#mean moisture
+moist.mean.se.forested <- tms.se.forested |> 
+   mc_calc_vwc( soiltype = "universal") |> 
+   mc_env_moist(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+moist.mean.se.forested <-  mutate(moist.mean.se.forested,avg_value = rowMeans(select(moist.mean.se.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+
+#mean temperature at 15cm
+temp.mean.se.forested <- tms.se.forested |> 
+   mc_env_temp(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.air_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+temp.mean.se.forested <-  mutate(temp.mean.se.forested,
+                              avg_value = rowMeans(select(temp.mean.se.forested, -datetime, -sensor_name), na.rm = TRUE))
+  
+
+#mean gdd number
+gdd.mean.se.forested <- tms.se.forested |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.GDD5") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+gdd.mean.se.forested <-  mutate(gdd.mean.se.forested,
+                              avg_value = rowMeans(select(gdd.mean.se.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+#mean frost days number
+fdd.mean.se.forested <- tms.se.forested |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.FDD0") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+fdd.mean.se.forested <-  mutate(fdd.mean.se.forested,
+                              avg_value = rowMeans(select(fdd.mean.se.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+
+# Senja Datasets
+#mean moisture
+moist.mean.ka.forested <- tms.ka.forested |> 
+   mc_calc_vwc( soiltype = "universal") |> 
+   mc_env_moist(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+moist.mean.ka.forested <-  mutate(moist.mean.ka.forested,avg_value = rowMeans(select(moist.mean.ka.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+
+#mean temperature at 15cm
+temp.mean.ka.forested <- tms.ka.forested |> 
+   mc_env_temp(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.air_15_cm.mean") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+
+temp.mean.ka.forested <-  mutate(temp.mean.ka.forested,
+                              avg_value = rowMeans(select(temp.mean.ka.forested, -datetime, -sensor_name), na.rm = TRUE))
+  
+
+#mean gdd number
+gdd.mean.ka.forested <- tms.ka.forested |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.GDD5") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+gdd.mean.ka.forested <-  mutate(gdd.mean.ka.forested,
+                              avg_value = rowMeans(select(gdd.mean.ka.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+#mean frost days number
+fdd.mean.ka.forested <- tms.ka.forested |> 
+   mc_env_temp(period = "month", min_coverage = 0.9) |> 
+  filter(sensor_name == "T.soil_8_cm.FDD0") |> 
+  pivot_wider(
+    id_cols = c(datetime, sensor_name),
+    names_from = locality_id,
+    values_from = value)
+fdd.mean.ka.forested <-  mutate(fdd.mean.ka.forested,
+                              avg_value = rowMeans(select(fdd.mean.ka.forested, -datetime, -sensor_name), na.rm = TRUE))
+
+```
+
+```{r}
+library(ggplot2)
+library(cowplot)
+
+# Function to create a plot for one variable across four sites with open/forested
+create_plot <- function(data_list, title, y_label, colors, line_types) {
+  p <- ggplot() +
+    geom_line(data = data_list[[1]], aes(x = datetime, y = avg_value, color = "Site 1 Open", linetype = "Open")) +
+    geom_line(data = data_list[[2]], aes(x = datetime, y = avg_value, color = "Site 1 Forested", linetype = "Forested")) +
+    geom_line(data = data_list[[3]], aes(x = datetime, y = avg_value, color = "Site 2 Open", linetype = "Open")) +
+    geom_line(data = data_list[[4]], aes(x = datetime, y = avg_value, color = "Site 2 Forested", linetype = "Forested")) +
+    geom_line(data = data_list[[5]], aes(x = datetime, y = avg_value, color = "Site 3 Open", linetype = "Open")) +
+    geom_line(data = data_list[[6]], aes(x = datetime, y = avg_value, color = "Site 3 Forested", linetype = "Forested")) +
+    geom_line(data = data_list[[7]], aes(x = datetime, y = avg_value, color = "Site 4 Open", linetype = "Open")) +
+    geom_line(data = data_list[[8]], aes(x = datetime, y = avg_value, color = "Site 4 Forested", linetype = "Forested")) +
+    scale_color_manual(values = colors) +
+    scale_linetype_manual(values = line_types) +
+    labs(title = title, x = "Time", y = y_label, color = "Site", linetype = "Area Type") +
+    theme_classic() +
+    theme(legend.position = "bottom")
+  
+  return(p)
+}
+
+# Function to generate the four-panel figure
+create_four_panel_plot <- function(dataset_list, colors, line_types) {
+  p.moist <- create_plot(dataset_list$moist, "Soil Moisture", "Soil Moisture Content", colors, line_types)
+  p.temp <- create_plot(dataset_list$temp, "Mean Temperature", "Temperature", colors, line_types)
+  p.gdd <- create_plot(dataset_list$gdd, "Growing Degree Days", "Days", colors, line_types)
+  p.fdd <- create_plot(dataset_list$fdd, "Freezing Days", "Temperature", colors, line_types)
+
+  # Combine plots into a grid, removing individual legends
+  combined_plot <- plot_grid(p.moist + theme(legend.position = "none"), 
+                             p.temp + theme(legend.position = "none"),
+                             p.gdd + theme(legend.position = "none"), 
+                             p.fdd + theme(legend.position = "none"), 
+                             ncol = 2, labels = "AUTO")
+
+  # Extract shared legend
+  legend <- get_legend(p.moist)
+
+  # Arrange final figure with legend below
+  final_plot <- plot_grid(combined_plot, legend, ncol = 1, rel_heights = c(1, 0.15))
+
+  return(final_plot)
+}
+
+# Define custom colors per site (distinct colors for clarity)
+custom_colors <- c("Site 1 Open" = "#1f78b4", "Site 1 Forested" = "#a6cee3",
+                   "Site 2 Open" = "#33a02c", "Site 2 Forested" = "#b2df8a",
+                   "Site 3 Open" = "#e31a1c", "Site 3 Forested" = "#fb9a99",
+                   "Site 4 Open" = "#ff7f00", "Site 4 Forested" = "#fdbf6f")
+
+# Define custom line types for open vs forested areas
+custom_line_types <- c("Open" = "solid", "Forested" = "dashed")
+
+# Example dataset input (each variable now has 8 datasets: 4 sites × 2 conditions)
+dataset_list <- list(
+  moist = list(moist.mean.ly.open, moist.mean.ly.forested,
+               moist.mean., moist.site2.forested,
+               moist.site3.open, moist.site3.forested,
+               moist.site4.open, moist.site4.forested),
+  temp = list(temp.site1.open, temp.site1.forested,
+              temp.site2.open, temp.site2.forested,
+              temp.site3.open, temp.site3.forested,
+              temp.site4.open, temp.site4.forested),
+  gdd = list(gdd.site1.open, gdd.site1.forested,
+             gdd.site2.open, gdd.site2.forested,
+             gdd.site3.open, gdd.site3.forested,
+             gdd.site4.open, gdd.site4.forested),
+  fdd = list(fdd.site1.open, fdd.site1.forested,
+             fdd.site2.open, fdd.site2.forested,
+             fdd.site3.open, fdd.site3.forested,
+             fdd.site4.open, fdd.site4.forested)
+)
+
+# Generate the final plot
+final_plot_allSites <- create_four_panel_plot(dataset_list, custom_colors, custom_line_types)
+
+
+```
+
+```{r}
+temp.max.all.daily <- temp_env_all_daily |> 
+  filter(sensor_name == "T.air_15_cm.max95p") |> 
+    select("loggerID" = locality_id, sensor_name, datetime, "temp_max_air" = value) 
+temp.max.all.daily$loggerID = as.numeric(temp.max.all.daily$loggerID)
+
+temp.max.all.daily <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(temp.max.all.daily) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  group_by(site, datetime) |>
+  #group_by(site, datetime) |>
+  summarise(max.temp.air = max(temp_max_air, na.rm = TRUE)) |>  
+  ungroup()
+
+temp.max.all.daily.hab <- temp_env_all_daily |> 
+  filter(sensor_name == "T.air_15_cm.max95p") |>
+    select("loggerID" = locality_id, sensor_name, datetime, "temp_max_air" = value) 
+temp.max.all.daily.hab$loggerID = as.numeric(temp.max.all.daily.hab$loggerID)
+
+temp.max.all.daily.hab <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(temp.max.all.daily.hab) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  filter(!is.na(datetime)) |> 
+  group_by(site, habitat, datetime) |>
+  #group_by(site, datetime) |>
+  summarise(temp.max.all.hab = max(temp_max_air, na.rm = TRUE)) |>  
+  ungroup()
+
+temp.max.all.daily.hab.log <- temp_env_all_daily |> 
+  filter(sensor_name == "T.air_15_cm.max95p") |>
+    select("loggerID" = locality_id, sensor_name, datetime, "temp_max_air" = value) 
+temp.max.all.daily.hab.log$loggerID = as.numeric(temp.max.all.daily.hab.log$loggerID)
+
+temp.max.all.daily.hab.log <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(temp.max.all.daily.hab.log) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  filter(!is.na(datetime)) |> 
+  group_by(site, habitat, loggerID, datetime) |>
+  #group_by(site, datetime) |>
+  summarise(temp.max = max(temp_max_air, na.rm = TRUE)) |>  
+  ungroup()
+
+
+
+
+library(dplyr)
+
+# Function to count temperature exceedances
+count_temp_exceedances <- function(temp_data, temp_column, site_column, habitat_column, date_column) {
+  
+  # Define thermal limits
+  upper_limits <- c(1, 5, 25, 30, 35, 40, 45)
+  lower_limits <- c(0, -5, -10, -20, -25)
+  
+  # Group data by site and habitat, then count exceedances
+  results_df <- temp_data %>%
+    group_by(!!sym(site_column), !!sym(habitat_column), !!sym(date_column)) %>%
+    summarise(across(all_of(temp_column), list(
+      Above_0C = ~ sum(. >= 1, na.rm = TRUE),
+      Above_5C = ~ sum(. >= 5, na.rm = TRUE),
+      Above_25C = ~ sum(. >= 25, na.rm = TRUE),
+      Above_30C = ~ sum(. >= 30, na.rm = TRUE),
+      Above_35C = ~ sum(. >= 35, na.rm = TRUE),
+      Above_40C = ~ sum(. >= 40, na.rm = TRUE),
+      Above_45C = ~ sum(. >= 45, na.rm = TRUE),
+      Below_0C  = ~ sum(. <= 0, na.rm = TRUE),
+      Below_minus5C  = ~ sum(. <= -5, na.rm = TRUE),
+      Below_minus10C = ~ sum(. <= -10, na.rm = TRUE),
+      Below_minus20C = ~ sum(. <= -20, na.rm = TRUE),
+      Below_minus25C = ~ sum(. <= -25, na.rm = TRUE)
+    ), .names = "{col}_{fn}"), .groups = "drop") %>%
+    rename(Site = !!site_column, Habitat = !!habitat_column, Date = !!date_column)
+  
+  return(results_df)
+}
+
+
+
+temp_extremes <- count_temp_exceedances(temp_data = temp.max.all.daily.hab,
+                                        temp_column =  "temp.max.all.hab",
+                                        date_column = "datetime", 
+                                        site_column = "site",
+                                        habitat_column = "habitat")
+
+# By loggerID for variance
+# Function to count temperature exceedances with loggerID
+count_temp_exceedances_logger <- function(temp_data, temp_column, site_column, habitat_column, date_column, loggerID_column) {
+  
+  # Define thermal limits
+  upper_limits <- c(1, 5, 10, 15, 25, 30, 35, 40, 45)
+  lower_limits <- c(0, -5, -10, -15, -20, -25)
+  
+  # Group data by site, habitat, datetime, and loggerID, then count exceedances
+  results_df <- temp_data %>%
+    group_by(!!sym(site_column), !!sym(habitat_column), !!sym(date_column), !!sym(loggerID_column)) %>%
+    summarise(across(all_of(temp_column), list(
+      Above_0C = ~ sum(. >= 1, na.rm = TRUE),
+      Above_5C = ~ sum(. >= 5, na.rm = TRUE),
+      Above_10C = ~ sum(. >= 10, na.rm = TRUE),
+      Above_15C = ~ sum(. >= 15, na.rm = TRUE),
+      Above_25C = ~ sum(. >= 25, na.rm = TRUE),
+      Above_30C = ~ sum(. >= 30, na.rm = TRUE),
+      Above_35C = ~ sum(. >= 35, na.rm = TRUE),
+      Above_40C = ~ sum(. >= 40, na.rm = TRUE),
+      Above_45C = ~ sum(. >= 45, na.rm = TRUE),
+      Below_0C  = ~ sum(. <= 0, na.rm = TRUE),
+      Below_minus5C  = ~ sum(. <= -5, na.rm = TRUE),
+      Below_minus10C = ~ sum(. <= -10, na.rm = TRUE),
+      Below_minus15C = ~ sum(. <= -15, na.rm = TRUE),
+      Below_minus20C = ~ sum(. <= -20, na.rm = TRUE),
+      Below_minus25C = ~ sum(. <= -25, na.rm = TRUE)
+    ), .names = "{col}_{fn}"), .groups = "drop") %>%
+    rename(Site = !!site_column, Habitat = !!habitat_column, Date = !!date_column, LoggerID = !!loggerID_column)
+  
+  return(results_df)
+}
+
+temp_extremes_logger <- count_temp_exceedances_logger(temp_data = temp.max.all.daily.hab.log,
+                                        temp_column =  "temp.max",
+                                        date_column = "datetime", 
+                                        site_column = "site",
+                                        habitat_column = "habitat",
+                                        loggerID_column = "loggerID")
+
+
+
+library(dplyr)
+
+# Function to sum exceedances within a date range
+library(dplyr)
+
+# Function to sum exceedances within a date range
+library(dplyr)
+
+# Function to sum exceedances within a date range, grouped by site & habitat
+sum_temp_exceedances_by_group <- function(data, start_date, end_date) {
+  
+  # Ensure Date column is formatted properly
+  data <- data %>%
+    mutate(Date = as.Date(Date)) %>%
+    filter(Date >= as.Date(start_date) & Date <= as.Date(end_date))  # Filter by date range
+  
+  # Select only temperature exceedance columns
+  exceedance_cols <- setdiff(names(data), c("Site", "Habitat", "Date"))
+  
+  # Summarize exceedances **by site & habitat**
+  grouped_exceedances <- data %>%
+    group_by(Site, Habitat) %>%
+    summarise(across(all_of(exceedance_cols), \(x) sum(x, na.rm = TRUE)), .groups = "drop")
+  
+  return(grouped_exceedances)
+}
+
+# Example usage:
+ grouped_totals <- sum_temp_exceedances_by_group(temp_extremes,
+                                                 start_date = "2023-08-10",
+                                                 end_date = "2024-07-05")
+ print(grouped_totals)
+
+ 
+ 
+ # By Logger ID
+# Function to sum exceedances within a date range, grouped by site, habitat, and loggerID
+count_dates_temp_exceedances <- function(temp_data, temp_column, site_column, habitat_column, date_column, loggerID_column) {
+  
+  # Define thermal thresholds
+  thresholds <- c(1, 5, 10, 15, 25, 30, 35, 40, 45, 0, -5, -10, -15, -20, -25)
+  
+  # Count unique dates where exceedances occur per logger
+  results_df <- temp_data %>%
+    mutate(Date = as.Date(!!sym(date_column))) %>%
+    group_by(!!sym(site_column), !!sym(habitat_column), !!sym(loggerID_column)) %>%
+    summarise(across(all_of(temp_column), list(
+      Above_0C = ~ sum(. >= 1, na.rm = TRUE),
+      Above_5C = ~ sum(. >= 5, na.rm = TRUE),
+      Above_10C = ~ sum(. >= 10, na.rm = TRUE),
+      Above_15C = ~ sum(. >= 15, na.rm = TRUE),
+      Above_25C = ~ sum(. >= 25, na.rm = TRUE),
+      Above_30C = ~ sum(. >= 30, na.rm = TRUE),
+      Above_35C = ~ sum(. >= 35, na.rm = TRUE),
+      Above_40C = ~ sum(. >= 40, na.rm = TRUE),
+      Above_45C = ~ sum(. >= 45, na.rm = TRUE),
+      Below_0C  = ~ sum(. <= 0, na.rm = TRUE),
+      Below_minus5C  = ~ sum(. <= -5, na.rm = TRUE),
+      Below_minus10C = ~ sum(. <= -10, na.rm = TRUE),
+      Below_minus15C = ~ sum(. <= -15, na.rm = TRUE),
+      Below_minus20C = ~ sum(. <= -20, na.rm = TRUE),
+      Below_minus25C = ~ sum(. <= -25, na.rm = TRUE)
+    ), .names = "{col}_{fn}"), .groups = "drop") %>%
+    rename(Site = !!site_column, Habitat = !!habitat_column, LoggerID = !!loggerID_column)
+
+  return(results_df)
+}
+
+
+# Once we have per-logger exceedance counts, we can compute averages, standard deviation, and standard error for each site and habitat.
+
+summarize_exceedances_per_site_habitat <- function(exceedance_data, site_column, habitat_column) {
+  
+  # Select exceedance count columns dynamically
+  exceedance_cols <- setdiff(names(exceedance_data), c(site_column, habitat_column, "LoggerID"))
+
+  # Summarize across loggers for each site and habitat
+  summary_df <- exceedance_data %>%
+    group_by(!!sym(site_column), !!sym(habitat_column)) %>%
+    summarise(across(all_of(exceedance_cols), list(
+      Mean = ~ mean(.x, na.rm = TRUE),
+      SD = ~ sd(.x, na.rm = TRUE),
+      SE = ~ sd(.x, na.rm = TRUE) / sqrt(n())
+    ), .names = "{col}_{fn}"), .groups = "drop") %>%
+    rename(Site = !!site_column, Habitat = !!habitat_column)
+
+  return(summary_df)
+}
+
+
+# Step 1: Get exceedance count per logger
+logger_exceedances <- count_dates_temp_exceedances(temp_data = temp.max.all.daily.hab.log,
+                                                   temp_column = "temp.max",
+                                                   site_column = "site",
+                                                   habitat_column = "habitat",
+                                                   loggerID_column = "loggerID",
+                                                   date_column = "datetime")
+
+# Step 2: Aggregate statistics across loggers for each site/habitat
+site_habitat_summary <- summarize_exceedances_per_site_habitat(logger_exceedances,
+                             site_column = "Site",
+                            habitat_column = "Habitat")
+
+print(site_habitat_summary)
+
+
+
+
+library(ggplot2)
+library(tidyr)  # Helps reshape data
+library(stringr)  # For text cleaning
+
+# Define custom colors for sites
+Site_Colors <- c("Lygra" = "#1b9e77", "Sogndal" = "#d95f02",
+                 "Senja" = "#7570b3", "Kautokeino" = "#aeb370")  # Adjust as needed
+
+  
+
+# Define custom shapes for habitats
+Habitat_Shapes <- c("Forested" = 16, "Open" = 17)  # 16 = filled circle, 17 = triangle
+
+# Function to plot exceedances with correct formatting, ordering, and site colors
+plot_exceedances <- function(summary_data) {
+  
+  # Convert data to long format for plotting
+  long_data <- summary_data %>%
+    pivot_longer(cols = contains("_Mean"), names_to = "Threshold", values_to = "Mean") %>%
+    mutate(Threshold = str_replace_all(Threshold, "_Mean", "")) 
+
+  print("After pivot_longer:")
+  print(unique(long_data$Threshold))  # Debugging step
+
+  # Extract SD values for error bars
+  sd_data <- summary_data %>%
+    pivot_longer(cols = contains("_SD"), names_to = "Threshold_SD", values_to = "SD") %>%
+    mutate(Threshold_SD = str_replace_all(Threshold_SD, "_SD", ""))
+
+  # Merge mean and SD data
+  plot_data <- long_data %>%
+    left_join(sd_data, by = c("Site", "Habitat", "Threshold" = "Threshold_SD")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "temp.max_", "")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_minus", "< -")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_0C", "< 0°C")) %>%  # Keep "0" intact like negatives
+    mutate(Threshold = str_replace_all(Threshold, "Above_", "> ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "_", " ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "(>|<) (-?\\d+)C$", "\\1 \\2°C"))  # Ensure proper degree formatting
+
+  print("After applying Threshold formatting:")
+  print(unique(plot_data$Threshold))  # Debugging step
+
+  # **Explicitly define factor levels for correct ordering**
+  ordered_levels <- c("< -25°C", "< -20°C","< -15°C", "< -10°C", "< -5°C", "< 0°C",
+                      "> 0°C", "> 5°C", "> 10°C", "> 15°C", "> 25°C", "> 30°C", "> 35°C", "> 40°C", "> 45°C")
+
+  # **TEST: Manually convert to factor before applying ggplot**
+  test_levels <- factor(plot_data$Threshold, levels = ordered_levels, ordered = TRUE)
+  
+  print("Test Levels Before ggplot:")
+  print(unique(test_levels))  # Debugging step
+
+  # Convert to factor **inside the function**
+  plot_data$Threshold <- factor(plot_data$Threshold, levels = ordered_levels, ordered = TRUE)
+
+  print("Final ordered Thresholds:")
+  print(unique(plot_data$Threshold))  # Debugging step before ggplot
+
+  # Create the plot
+  ggplot(plot_data, aes(x = Threshold, y = Mean, color = Site, shape = Habitat)) +
+    geom_point(size = 3, position = position_dodge(0.5)) +
+    geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.2, position = position_dodge(0.5)) +
+    scale_color_manual(values = Site_Colors) +
+    scale_shape_manual(values = Habitat_Shapes) +
+    labs(title = "Mean Temperature Exceedances by Site & Habitat",
+         x = "Temperature Thresholds",
+         y = "Mean Count ± Standard Deviation",
+         color = "Site",
+         shape = "Habitat") +
+    theme_minimal(base_size = 14) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+
+# Example usage:
+plot_exceedances(site_habitat_summary)
+
+
+library(ggplot2)
+library(tidyr)
+library(stringr)
+library(dplyr)
+
+Site_Colors <- c("Lygra" = "#1b9e77", "Sogndal" = "#d95f02",
+                 "Senja" = "#7570b3", "Kautokeino" = "#aeb370")  # Adjust as needed
+
+  
+Habitat_Shapes <- c("Forested" = 16, "Open" = 17)
+
+# Function to format & facet temperature bins with separate rows for "Above" & "Below"
+plot_exceedances_faceted <- function(summary_data) {
+  
+  # Convert data to long format for plotting
+  long_data <- summary_data %>%
+    pivot_longer(cols = contains("_Mean"), names_to = "Threshold", values_to = "Mean") %>%
+    mutate(Threshold = str_replace_all(Threshold, "_Mean", ""))
+
+  print("After pivot_longer:")
+  print(unique(long_data$Threshold))  # Debugging check
+
+  # Extract SD values
+  sd_data <- summary_data %>%
+    pivot_longer(cols = contains("_SD"), names_to = "Threshold_SD", values_to = "SD") %>%
+    mutate(Threshold_SD = str_replace_all(Threshold_SD, "_SD", ""))
+
+  # Merge mean and SD data
+  plot_data <- long_data %>%
+    left_join(sd_data, by = c("Site", "Habitat", "Threshold" = "Threshold_SD")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "temp.max_", "")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_minus", "< -")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_0C", "< 0°C")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Above_", "> ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "_", " ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "(>|<) (-?\\d+)C", "\\1 \\2°C")) 
+
+  print("After applying Threshold formatting:")
+  print(unique(plot_data$Threshold))  # Debugging check
+
+  # Create a new column to classify Thresholds as "Above" or "Below"
+  plot_data <- plot_data %>%
+    mutate(Threshold_Type = ifelse(grepl(">", Threshold), "Above", "Below"))
+
+  print("Threshold classification:")
+  print(unique(plot_data$Threshold_Type))  # Debugging check
+
+  # Define factor levels to ensure proper ordering
+  plot_data$Threshold <- factor(plot_data$Threshold, 
+                                levels = c("< -25°C", "< -20°C","< -15°C", "< -10°C", "< -5°C", "< 0°C",
+                      "> 0°C", "> 5°C", "> 10°C", "> 15°C", "> 25°C", "> 30°C", "> 35°C", "> 40°C", "> 45°C"),
+                                ordered = TRUE)
+
+  print("Final ordered Thresholds:")
+  print(unique(plot_data$Threshold))  # Debugging check
+
+  # Convert Site to factor for proper color application
+  plot_data$Site <- factor(plot_data$Site)
+
+  # Create faceted plot with separate rows for Above vs. Below thresholds
+ggplot(plot_data, aes(x = Habitat, y = Mean, color = Site, shape = Habitat, group = Site)) +
+    geom_point(size = 3, position = position_dodge(0.5)) +  # Keeps points distinct
+    geom_line(position = position_dodge(0.5), linewidth = 1) +  # Connects Open & Forested per site
+    geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.2, position = position_dodge(0.5)) +
+    facet_wrap(~ Threshold, scales = "free_y") +  # Independent facets for temperature bins
+    scale_color_manual(values = Site_Colors) +
+    scale_shape_manual(values = Habitat_Shapes) +
+    scale_y_continuous(limits = c(0, NA)) +  # Prevents negative y-values
+    labs(title = "Mean Temperature Exceedances by Habitat",
+         x = "Habitat Type",
+         y = "Mean Count ± SD",
+         color = "Site",
+         shape = "Habitat") +
+    theme_minimal(base_size = 14) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+}
+
+# Example usage:
+plot_exceedances_faceted(site_habitat_summary)
+
+
+# Function to format & facet temperature bins with separate rows for "Above" & "Below"
+plot_exceedances_faceted2 <- function(summary_data) {
+  
+  # Convert data to long format for plotting
+  long_data <- summary_data %>%
+    pivot_longer(cols = contains("_Mean"), names_to = "Threshold", values_to = "Mean") %>%
+    mutate(Threshold = str_replace_all(Threshold, "_Mean", ""))
+
+  print("After pivot_longer:")
+  print(unique(long_data$Threshold))  # Debugging check
+
+  # Extract SD values
+  sd_data <- summary_data %>%
+    pivot_longer(cols = contains("_SD"), names_to = "Threshold_SD", values_to = "SD") %>%
+    mutate(Threshold_SD = str_replace_all(Threshold_SD, "_SD", ""))
+
+  # Merge mean and SD data
+  plot_data <- long_data %>%
+    left_join(sd_data, by = c("Site", "Habitat", "Threshold" = "Threshold_SD")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "temp.max_", "")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_minus", "< -")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_0C", "< 0°C")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Above_", "> ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "_", " ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "(>|<) (-?\\d+)C", "\\1 \\2°C")) 
+
+  print("After applying Threshold formatting:")
+  print(unique(plot_data$Threshold))  # Debugging check
+
+  # Create a new column to classify Thresholds as "Above" or "Below"
+  plot_data <- plot_data %>%
+    mutate(Threshold_Type = ifelse(grepl(">", Threshold), "Above", "Below"))
+
+  print("Threshold classification:")
+  print(unique(plot_data$Threshold_Type))  # Debugging check
+
+  # Define factor levels to ensure proper ordering
+  plot_data$Threshold <- factor(plot_data$Threshold, 
+                                levels = c("< -25°C", "< -20°C","< -15°C", "< -10°C", "< -5°C", "< 0°C",
+                      "> 0°C", "> 5°C", "> 10°C", "> 15°C", "> 25°C", "> 30°C", "> 35°C", "> 40°C", "> 45°C"),
+                                ordered = TRUE)
+
+  print("Final ordered Thresholds:")
+  print(unique(plot_data$Threshold))  # Debugging check
+
+  # Convert Site to factor for proper color application
+  plot_data$Site <- factor(plot_data$Site)
+
+  # Create faceted plot with separate rows for Above vs. Below thresholds
+  ggplot(plot_data, aes(x = Habitat, y = Mean, color = Site, shape = Habitat)) +
+    geom_point(size = 3, position = position_dodge(0.5)) +
+        geom_line(position = position_dodge(0.5), linewidth = 1) +  # Connects Open & Forested per site
+    geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.2, position = position_dodge(0.5)) +
+    facet_grid(cols = vars(Threshold), scales = "free_y") +  # Rows for Above vs. Below
+    scale_color_manual(values = Site_Colors) +
+    scale_shape_manual(values = Habitat_Shapes) +
+    scale_y_continuous(limits = c(0, NA)) +  # Prevents negative y-values
+    labs(title = "Mean Temperature Exceedances by Habitat",
+         x = "Habitat Type",
+         y = "Mean Count ± SD",
+         color = "Site",
+         shape = "Habitat") +
+    theme_minimal(base_size = 14) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+# Example usage:
+plot_exceedances_faceted2(site_habitat_summary)
+
+```
+
+```{r}
+library(ggplot2)
+library(ggridges)
+
+# Function to create a temperature exceedences heatmap
+plot_exceedances_heatmap <- function(summary_data) {
+  
+  # Convert data to long format for plotting
+  long_data <- summary_data %>%
+    pivot_longer(cols = contains("_Mean"), names_to = "Threshold", values_to = "Mean") %>%
+    mutate(Threshold = str_replace_all(Threshold, "_Mean", ""))
+
+  print("After pivot_longer:")
+  print(unique(long_data$Threshold))  # Debugging check
+
+  # Extract SD values
+  sd_data <- summary_data %>%
+    pivot_longer(cols = contains("_SD"), names_to = "Threshold_SD", values_to = "SD") %>%
+    mutate(Threshold_SD = str_replace_all(Threshold_SD, "_SD", ""))
+
+  # Merge mean and SD data
+  plot_data <- long_data %>%
+    left_join(sd_data, by = c("Site", "Habitat", "Threshold" = "Threshold_SD")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "temp.max_", "")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_minus", "< -")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_0C", "< 0°C")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Above_", "> ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "_", " ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "(>|<) (-?\\d+)C", "\\1 \\2°C")) 
+
+  print("After applying Threshold formatting:")
+  print(unique(plot_data$Threshold))  # Debugging check
+
+  # Create a new column to classify Thresholds as "Above" or "Below"
+  plot_data <- plot_data %>%
+    mutate(Threshold_Type = ifelse(grepl(">", Threshold), "Above", "Below"))
+
+  print("Threshold classification:")
+  print(unique(plot_data$Threshold_Type))  # Debugging check
+
+  # Define factor levels to ensure proper ordering
+  plot_data$Threshold <- factor(plot_data$Threshold, 
+                                levels = c("< -25°C", "< -20°C","< -15°C", "< -10°C", "< -5°C", "< 0°C",
+                      "> 0°C", "> 5°C", "> 10°C", "> 15°C", "> 25°C", "> 30°C", "> 35°C", "> 40°C", "> 45°C"),
+                                ordered = TRUE)
+
+  print("Final ordered Thresholds:")
+  print(unique(plot_data$Threshold))  # Debugging check
+
+  # Convert Site to factor for proper color application
+  plot_data$Site <- factor(plot_data$Site)
+
+
+library(scales)  # For color brightness calculations
+
+# Determine text color based on background brightness
+plot_data <- plot_data %>%
+  # Switch based on exceedance count
+    mutate(TextColor = ifelse(Mean > 200, "black", "white"))  %>% 
+    mutate(Site_Habitat = paste(Site, Habitat, sep = "\n"))
+
+ggplot(plot_data, aes(x = Site_Habitat, y = Threshold, fill = Mean)) +
+    geom_tile(color = "white") +  # Ensures separation between tiles
+    geom_text(aes(label = round(Mean, 0), color = TextColor), size = 4) +  # Adjusts text color dynamically
+    scale_color_identity() +  # Uses pre-defined text colors
+    scale_fill_viridis_c(option = "magma") +  # Heatmap color scheme
+    scale_x_discrete(guide = guide_axis(angle = 0)) +  # Keep multi-line labels readable
+    facet_wrap(~ Site, nrow = 1, scales = "free_x") +  # Separate facets per site
+    theme_minimal() +
+    theme(
+        strip.text = element_text(size = 12, face = "bold"),  # Increases facet label size
+        panel.spacing = unit(2, "lines")  # Adds extra space between site facets
+    ) +
+    labs(title = "Heatmap of Temperature Exceedances by Site & Habitat",
+         x = "Site & Habitat",
+         y = "Temperature Threshold",
+         fill = "Mean Exceedance Count")
+}
+
+# Example usage:
+plot_exceedances_heatmap(site_habitat_summary)
+```
+
+```{r}
+temp.max.all.daily.hab.log <- temp_env_all_daily |> 
+  filter(sensor_name == "T.air_15_cm.max95p") |>
+    select("loggerID" = locality_id, sensor_name, datetime, "temp_max_air" = value) 
+temp.max.all.daily.hab.log$loggerID = as.numeric(temp.max.all.daily.hab.log$loggerID)
+
+temp.max.all.daily.hab.log <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(temp.max.all.daily.hab.log) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  filter(!is.na(datetime)) |> 
+  group_by(site, habitat, loggerID, datetime) |>
+  #group_by(site, datetime) |>
+  summarise(temp.max = max(temp_max_air, na.rm = TRUE)) |>  
+  ungroup()
+
+# Minimum temperature extremes
+temp.min.all.daily.hab.log <- temp_env_all_daily |> 
+  filter(sensor_name == "T.air_15_cm.min5p") |>
+    select("loggerID" = locality_id, sensor_name, datetime, "temp_min_air" = value) 
+temp.min.all.daily.hab.log$loggerID = as.numeric(temp.min.all.daily.hab.log$loggerID)
+
+temp.min.all.daily.hab.log <- active_metadata |> 
+  select(loggerID, site, "habitat" = land_type) |> 
+  left_join(temp.min.all.daily.hab.log) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  filter(!is.na(datetime)) |> 
+  group_by(site, habitat, loggerID, datetime) |>
+  #group_by(site, datetime) |>
+  summarise(temp.min = min(temp_min_air, na.rm = TRUE)) |>  
+  ungroup()
+
+
+
+
+
+# Function to count maximum temperature exceedances (Above thresholds)
+count_max_temp_exceedances <- function(temp_data, site_column, habitat_column, date_column, loggerID_column) {
+  
+  # Define upper thermal thresholds
+  thresholds <- c(1, 5, 10, 15, 25, 30, 35, 40, 45)
+
+  results_df <- temp_data %>%
+    mutate(Date = as.Date(!!sym(date_column))) %>%
+    group_by(!!sym(site_column), !!sym(habitat_column), !!sym(loggerID_column)) %>%
+    summarise(across("temp.max", list(
+      Above_0C = ~ sum(. >= 1, na.rm = TRUE),
+      Above_5C = ~ sum(. >= 5, na.rm = TRUE),
+      Above_10C = ~ sum(. >= 10, na.rm = TRUE),
+      Above_15C = ~ sum(. >= 15, na.rm = TRUE),
+      Above_25C = ~ sum(. >= 25, na.rm = TRUE),
+      Above_30C = ~ sum(. >= 30, na.rm = TRUE),
+      Above_35C = ~ sum(. >= 35, na.rm = TRUE),
+      Above_40C = ~ sum(. >= 40, na.rm = TRUE),
+      Above_45C = ~ sum(. >= 45, na.rm = TRUE)
+    ), .names = "{col}_{fn}"), .groups = "drop")
+  
+  return(results_df)
+}
+
+# Function to count minimum temperature exceedances (Below thresholds)
+count_min_temp_exceedances <- function(temp_data, site_column, habitat_column, date_column, loggerID_column) {
+  
+  # Define lower thermal thresholds
+  thresholds <- c(0, -5, -10, -15, -20, -25)
+
+  results_df <- temp_data %>%
+    mutate(Date = as.Date(!!sym(date_column))) %>%
+    group_by(!!sym(site_column), !!sym(habitat_column), !!sym(loggerID_column)) %>%
+    summarise(across("temp.min", list(
+      Below_0C  = ~ sum(. <= 0, na.rm = TRUE),
+      Below_minus5C  = ~ sum(. <= -5, na.rm = TRUE),
+      Below_minus10C = ~ sum(. <= -10, na.rm = TRUE),
+      Below_minus15C = ~ sum(. <= -15, na.rm = TRUE),
+      Below_minus20C = ~ sum(. <= -20, na.rm = TRUE),
+      Below_minus25C = ~ sum(. <= -25, na.rm = TRUE)
+    ), .names = "{col}_{fn}"), .groups = "drop")
+  
+  return(results_df)
+}
+
+summarize_exceedances_per_site_habitat <- function(exceedance_data, site_column, habitat_column) {
+  
+  # exceedance_data <- exceedance_data %>%
+  #   mutate(LoggerID = as.factor(LoggerID))  # Forces LoggerID to be categorical
+  
+  # Select exceedance count columns dynamically (excluding LoggerID)
+  exceedance_cols <- setdiff(names(exceedance_data), c(site_column, habitat_column, "loggerID"))
+
+  # **Sum exceedances across loggers**, then compute SD & SE
+  summary_df <- exceedance_data %>%
+    group_by(!!sym(site_column), !!sym(habitat_column)) %>%
+    summarise(across(all_of(exceedance_cols), list(
+      Mean = ~ mean(.x, na.rm = TRUE),  # Correct averaging (LoggerID NOT included)
+      SD = ~ sd(.x, na.rm = TRUE),  # Standard deviation across loggers
+      SE = ~ sd(.x, na.rm = TRUE) / sqrt(n())  # Correct application of sample size
+    ), .names = "{col}_{fn}"), .groups = "drop") %>%
+    rename(Site = !!site_column, Habitat = !!habitat_column)
+
+  return(summary_df)
+}
+
+
+
+# Compute summaries for max and min exceedances separately
+max_exceedance_summary <- summarize_exceedances_per_site_habitat(max_exceedances, "site", "habitat")
+min_exceedance_summary <- summarize_exceedances_per_site_habitat(min_exceedances, "site", "habitat")
+
+# Merge summaries into a single dataset
+combined_summary <- full_join(max_exceedance_summary, min_exceedance_summary, by = c("Site", "Habitat"))
+
+
+
+
+# Function to create a temperature exceedences heatmap
+plot_exceedances_heatmap_combined <- function(summary_data) {
+  
+  # Convert data to long format for plotting
+  long_data <- summary_data %>%
+    pivot_longer(cols = contains("_Mean"), names_to = "Threshold", values_to = "Mean")
+
+
+  print("After pivot_longer:")
+  print(unique(long_data$Threshold))  # Debugging check
+
+  # Extract SD values
+  sd_data <- summary_data %>%
+    pivot_longer(cols = contains("_SD"), names_to = "Threshold_SD", values_to = "SD") %>%
+    mutate(Threshold_SD = str_replace_all(Threshold_SD, "_SD", ""))
+
+  # Merge mean and SD data
+  plot_data <- long_data %>%
+    left_join(sd_data, by = c("Site", "Habitat", "Threshold" = "Threshold_SD")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "temp.max_", "")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "temp.min_", "")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_minus", "< -")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_0C", "< 0°C")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Above_", "> ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "_Mean", "")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "_", " ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "(>|<) (-?\\d+)C", "\\1 \\2°C")) 
+
+  print("After applying Threshold formatting:")
+  print(unique(plot_data$Threshold))  # Debugging check
+
+  # Create a new column to classify Thresholds as "Above" or "Below"
+  plot_data <- plot_data %>%
+    mutate(Threshold_Type = ifelse(grepl(">", Threshold), "Above", "Below"))
+
+  print("Threshold classification:")
+  print(unique(plot_data$Threshold_Type))  # Debugging check
+
+  # Define factor levels to ensure proper ordering
+  plot_data$Threshold <- factor(plot_data$Threshold, 
+                                levels = c("< -25°C", "< -20°C","< -15°C", "< -10°C", "< -5°C", "< 0°C",
+                      "> 0°C", "> 5°C", "> 10°C", "> 15°C", "> 25°C", "> 30°C", "> 35°C", "> 40°C", "> 45°C"),
+                                ordered = TRUE)
+
+  print("Final ordered Thresholds:")
+  print(unique(plot_data$Threshold))  # Debugging check
+
+  # Convert Site to factor for proper color application
+  plot_data$Site <- factor(plot_data$Site)
+  
+  print("Check column names:")
+  print(names(plot_data))  # Verify column names
+
+
+
+library(scales)  # For color brightness calculations
+
+# Determine text color based on background brightness
+plot_data <- plot_data %>%
+   mutate(Site_Habitat = paste(Site, Habitat, sep = "\n"))  %>% 
+   mutate(Site_Habitat = str_replace_all(Site_Habitat, "\\n", " ")) %>%  # Replace line breaks with spaces
+      mutate(Site_Habitat = as.character(Site_Habitat))  %>% 
+  # Switch based on exceedance count
+    mutate(TextColor = ifelse(Mean > 200, "black", "white"))
+# print("Check column names:")
+# print(names(plot_data))  # Check if 'Site_Habitat' is present
+# print("Check unique values of Site_Habitat")  # Check if all values look correct
+# print(unique(plot_data$Site_Habitat))  # Check if all values look correct
+# print("Check class type of Site_Habitat")  # Check if all values look correct
+# print(str(plot_data$Site_Habitat))  # Check if numeric or categorical etc. 
+# print("Check for NA's in dataset")
+# print(summary(plot_data))  # Look for any `NA` values in Site_Habitat
+# print("Print TRUE if NA")
+# print(any(is.na(plot_data$Site_Habitat)))  # TRUE if NA values exist
+
+
+
+ggplot(plot_data, aes(x = Site_Habitat, y = Threshold, fill = Mean)) +
+      #geom_tile(color = "white") +  # Ensures separation between tiles
+    geom_tile(color = "white") +
+    geom_text(aes(label = round(Mean, 1), color = ifelse(Mean > 200, "black", "white")), size = 4) +  
+    scale_color_identity() +  # Uses pre-defined text colors
+    scale_fill_viridis_c(option = "magma") +  # Heatmap color scheme
+    scale_x_discrete(guide = guide_axis(angle = 0)) +  # Keep multi-line labels readable
+
+   facet_wrap( ~ Site, nrow = 1, scales = "free") +  # Separate facets per site
+   # facet_grid(rows = vars(Threshold_Type), scales = "free_y") +  # Adds separation for Above vs. Below within sites
+
+    theme_minimal() +
+   theme(legend.position = "bottom") +
+
+    theme(
+        strip.text = element_text(size = 12, face = "bold"),  # Increases facet label size
+        panel.spacing = unit(2, "lines")  # Adds extra space between site facets
+    ) +
+    labs(title = "Heatmap of Maximum & Minimum Temperature Exceedances",
+         x = "Site & Habitat",
+         y = "Temperature Threshold",
+         fill = "Number of Days Temperature Thresholds Were Exceeded")
+
+}
+
+# Example usage:
+plot_exceedances_heatmap_combined(combined_summary)
+```
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(stringr)
+library(dplyr)
+library(ggsignif)  # For statistical annotation
+library(rstatix)   # For pairwise comparisons
+
+# Define custom colors for sites
+Site_Colors <- c("Lygra" = "#1b9e77", "Sogndal" = "#d95f02",
+                 "Senja" = "#7570b3", "Kautokeino" = "#aeb370")  # Adjust as needed
+
+# Define custom shapes for habitats
+Habitat_Shapes <- c("Forested" = 16, "Open" = 17)
+
+# Function to format and facet temperature bins
+plot_exceedances <- function(summary_data) {
+  
+  # Convert data to long format for plotting
+  long_data <- summary_data %>%
+    pivot_longer(cols = contains("_Mean"), names_to = "Threshold", values_to = "Mean") %>%
+    mutate(Threshold = str_replace_all(Threshold, "_Mean", ""))
+
+  # Extract SD values
+  sd_data <- summary_data %>%
+    pivot_longer(cols = contains("_SD"), names_to = "Threshold_SD", values_to = "SD") %>%
+    mutate(Threshold_SD = str_replace_all(Threshold_SD, "_SD", ""))
+
+  # Merge mean and SD data
+  plot_data <- long_data %>%
+    left_join(sd_data, by = c("Site", "Habitat", "Threshold" = "Threshold_SD")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "temp.max_", "")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_minus", "< -")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Below_0C", "< 0°C")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "Above_", "> ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "_", " ")) %>%
+    mutate(Threshold = str_replace_all(Threshold, "(>|<) (-?\\d+)", "\\1 \\2°C")) 
+
+  # Define factor levels to ensure proper ordering
+  plot_data$Threshold <- factor(plot_data$Threshold, 
+                                levels = c("< -25°C", "< -20°C", "< -10°C", "< -5°C", "< 0°C",
+                                           "> 0°C", "> 5°C", "> 25°C", "> 30°C", "> 35°C", "> 40°C", "> 45°C"),
+                                ordered = TRUE)
+
+  # Convert Site to factor to ensure colors apply correctly
+  plot_data$Site <- factor(plot_data$Site)
+
+  # Create the faceted plot
+  ggplot(plot_data, aes(x = Habitat, y = Mean, color = Site, shape = Habitat)) +
+    geom_point(size = 3, position = position_dodge(0.5)) +
+    geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.2, position = position_dodge(0.5)) +
+    facet_wrap(~ Threshold, scales = "free_y") +  # Each temperature bin gets an independent facet
+    scale_color_manual(values = Site_Colors) +
+    scale_shape_manual(values = Habitat_Shapes) +
+    labs(title = "Mean Temperature Exceedances by Site & Habitat",
+         x = "Habitat Type",
+         y = "Mean Count ± SD",
+         color = "Site",
+         shape = "Habitat") +
+    theme_minimal(base_size = 14) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+# Example usage:
+plot_exceedances(site_habitat_summary)
+
+# -------------------------------------------------------------------------------------------------------
+# Statistical Analysis: Identifying Significant Differences Between Sites & Habitats
+# -------------------------------------------------------------------------------------------------------
+
+# Convert summary_data to long format for analysis
+stats_data <- site_habitat_summary %>%
+  pivot_longer(cols = contains("_Mean"), names_to = "Threshold", values_to = "Mean") %>%
+  mutate(Threshold = str_replace_all(Threshold, "_Mean", "")) %>%
+  mutate(Threshold = str_replace_all(Threshold, "temp.max_", "")) %>%
+  mutate(Threshold = str_replace_all(Threshold, "Below_minus", "< -")) %>%
+  mutate(Threshold = str_replace_all(Threshold, "Below_0C", "< 0°C")) %>%
+  mutate(Threshold = str_replace_all(Threshold, "Above_", "> ")) %>%
+  mutate(Threshold = str_replace_all(Threshold, "_", " ")) %>%
+  mutate(Threshold = str_replace_all(Threshold, "(>|<) (-?\\d+)", "\\1 \\2°C")) 
+
+# ANOVA Test: Checking for effects of Site & Habitat
+anova_results <- aov(Mean ~ Site * Habitat, data = stats_data)
+summary(anova_results)
+
+# If normality assumptions fail, switch to Kruskal-Wallis Test
+kruskal_results <- stats_data %>%
+  group_by(Threshold) %>%
+  kruskal_test(Mean ~ Site * Habitat)
+print(kruskal_results)
+
+# Pairwise comparisons (Tukey's HSD or Dunn's Test for non-parametric data)
+pairwise_results <- stats_data %>%
+  group_by(Threshold) %>%
+  tukey_hsd(Mean ~ Site * Habitat)
+print(pairwise_results)
+
+# Annotate plot with significant differences
+sig_annotations <- stats_data %>%
+  group_by(Threshold) %>%
+  pairwise_t_test(Mean ~ Site * Habitat, p.adjust.method = "bonferroni")
+
+# Add significance to plot
+ggplot(stats_data, aes(x = Habitat, y = Mean, color = Site, shape = Habitat)) +
+  geom_point(size = 3, position = position_dodge(0.5)) +
+  geom_errorbar(aes(ymin = Mean - SD, ymax = Mean + SD), width = 0.2, position = position_dodge(0.5)) +
+  facet_wrap(~ Threshold, scales = "free_y") +
+  scale_color_manual(values = Site_Colors) +
+  scale_shape_manual(values = Habitat_Shapes) +
+  geom_signif(comparisons = list(c("Forested", "Open")), 
+              map_signif_level = TRUE, textsize = 5) +
+  labs(title = "Significant Differences in Temperature Exceedances",
+       x = "Habitat Type",
+       y = "Mean Count ± SD",
+       color = "Site",
+       shape = "Habitat") +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
 ```
